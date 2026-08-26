@@ -1,0 +1,15 @@
+export const colors = {
+  canvas: '#F4F1EA',
+  surface: '#FFFEFB',
+  ink: '#16342F',
+  mutedInk: '#61716D',
+  brand: '#214F46',
+  brandPressed: '#173C35',
+  accent: '#C57A4A',
+  accentSoft: '#F1DED0',
+  border: '#DCD8CF',
+  subduedSurface: '#EAE6DE',
+  white: '#FFFFFF',
+  danger: '#9D3F34',
+  dangerSoft: '#F2DCD8',
+} as const;
