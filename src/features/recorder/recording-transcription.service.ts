@@ -29,12 +29,6 @@ interface ErrorContext {
   traceId: string;
 }
 
-interface ReactNativeFormDataFile {
-  name: string;
-  type: typeof DEFAULT_M4A_MIME_TYPE;
-  uri: string;
-}
-
 const elapsedSince = (startedAt: number): number => Date.now() - startedAt;
 
 const createError = (
@@ -223,16 +217,7 @@ export const transcribeRecordingFile = async (
   }
 
   const formData = new FormData();
-  const nativeAudioFile: ReactNativeFormDataFile = {
-    name: recording.filename || 'recording.m4a',
-    type: DEFAULT_M4A_MIME_TYPE,
-    uri: recording.uri,
-  };
-  const appendNativeFile = formData.append.bind(formData) as unknown as (
-    name: string,
-    value: ReactNativeFormDataFile,
-  ) => void;
-  appendNativeFile('file', nativeAudioFile);
+  formData.append('file', audioFile);
 
   const apiClient = createApiClient({ baseUrl: appConfig.apiUrl });
   const abortController = new AbortController();
