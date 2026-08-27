@@ -156,11 +156,13 @@ saved M4A
 ```
 
 The client uploads one M4A as the `file` field of `multipart/form-data`. It never
-contacts OpenAI directly. Recording Detail shows processing, completed, failed,
-and not-started states; completed text is selectable and copyable. A failed
-request leaves the audio untouched and exposes Retry Transcription. If the app
-closes during an upload, a persisted `transcribing` state is changed to `failed`
-on the next library load so it cannot remain stuck permanently.
+contacts OpenAI directly. The development endpoint accepts recordings up to 25
+MB and returns a successful transcript as plain text. Recording Detail shows
+processing, completed, failed, and not-started states; completed text is
+selectable and copyable. A failed request leaves the audio untouched and exposes
+Retry Transcription. If the app closes during an upload, a persisted
+`transcribing` state is changed to `failed` on the next library load so it cannot
+remain stuck permanently.
 
 The development backend lives in `server/`, exposes `POST /transcribe`, and uses
 the `gpt-transcribe` model. It is deliberately small and unauthenticated, so use
@@ -229,6 +231,45 @@ npm start
 Adding `expo-clipboard` changes the native dependency set. Create one fresh iOS
 development build before physical-device acceptance; ordinary TypeScript edits
 after that can use the existing development build.
+
+### Trace a failed transcription
+
+Every transcription attempt receives a unique ID such as
+`atlas-tx-mabc1234-0001-x7k2p9qz`. The mobile client sends it in the
+`X-Atlas-Trace-Id` header, and both Metro and the backend write structured
+`[AtlasTranscription]` events containing that same ID. Logs include safe file
+metadata, stages, statuses, timing, and available OpenAI error/request metadata;
+they do not contain file paths, audio bytes, transcript text, API keys, or
+authorization headers.
+
+In a development build, open a failed recording and expand **Technical details**
+under the transcript card. Use its trace ID to search both terminals:
+
+1. Search the Metro terminal for the trace ID to see local file discovery,
+   upload start, the typed client error, and local metadata persistence.
+2. Search the `npm run backend` terminal for the same ID to see upload
+   acceptance/rejection, the OpenAI request and response, and any upstream
+   request ID.
+3. Compare the persisted code and stage with the final `REQUEST_FAILED` event.
+
+Stable error codes distinguish missing mobile configuration, unreachable or
+timed-out backends, rejected/invalid/oversized files, OpenAI authentication,
+rate limits and upstream failures, empty transcripts, invalid responses, and
+local metadata persistence failures. Retrying creates a new trace ID; the prior
+attempt remains distinguishable in terminal logs.
+
+To verify the backend failure contract without an audio file or OpenAI request,
+run this safe rejection test while the backend is running:
+
+```bash
+curl -i -X POST \
+  -H 'X-Atlas-Trace-Id: atlas-tx-manual-safe-failure' \
+  http://127.0.0.1:8787/transcribe
+```
+
+The response is structured JSON with `code`, `message`, `stage`, and `traceId`.
+The backend OpenAI timeout is 120 seconds and the mobile request timeout is 130
+seconds, allowing the backend time to return its more specific safe error first.
 
 ## Configuration and security
 

@@ -22,6 +22,7 @@ import {
 } from 'expo-audio';
 import { AppState, Linking } from 'react-native';
 
+import { appConfig } from '../../config/app.config';
 import { useAudioSession } from '../../services/audio';
 import { useAnimalSounds } from '../atlas/AnimalSoundProvider';
 import {
@@ -36,6 +37,15 @@ import type {
   RecorderIntegrityTestKind,
   RecordingFileValidation,
 } from './recorder.integrity.types';
+import {
+  createTranscriptionTraceId,
+  getBackendHost,
+  logTranscriptionEvent,
+  normalizeTranscriptionError,
+  toTranscriptionFailureDetails,
+  transcriptionErrorLogDetails,
+  TranscriptionError,
+} from './recording-transcription.errors';
 import {
   deleteRecording as deleteStoredRecording,
   loadRecordings,
@@ -628,32 +638,99 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         return true;
       }
 
+      const traceId = createTranscriptionTraceId();
+      const startedAt = Date.now();
+      const backendHost = getBackendHost(appConfig.apiUrl);
       transcriptionInFlightRef.current.add(recording.id);
       let transcribingStatusPersisted = false;
+      logTranscriptionEvent('info', 'TRANSCRIPTION_REQUESTED', traceId, {
+        backendHost,
+        previousTraceId: recording.transcriptionTraceId,
+        recordingId: recording.id,
+      });
 
       try {
-        const transcribingRecording = await updateRecordingTranscription(
-          recording.id,
-          'transcribing',
-          null,
-        );
+        let transcribingRecording: SavedRecording;
+
+        try {
+          transcribingRecording = await updateRecordingTranscription(
+            recording.id,
+            'transcribing',
+            null,
+            traceId,
+          );
+        } catch (error) {
+          throw new TranscriptionError(
+            {
+              code: 'LOCAL_PERSISTENCE_FAILED',
+              stage: 'recording_metadata_persisted',
+              traceId,
+            },
+            {
+              backendHost,
+              cause: error,
+              developerMessage:
+                error instanceof Error ? error.message : String(error),
+              requestDurationMs: Date.now() - startedAt,
+            },
+          );
+        }
+
         transcribingStatusPersisted = true;
         replaceRecording(transcribingRecording);
+        logTranscriptionEvent('info', 'TRANSCRIPTION_STATE_PERSISTED', traceId, {
+          recordingId: recording.id,
+          status: 'transcribing',
+        });
 
-        const transcript = await transcribeRecordingFile(transcribingRecording);
-        const completedRecording = await updateRecordingTranscription(
-          recording.id,
-          'complete',
-          transcript,
+        const result = await transcribeRecordingFile(
+          transcribingRecording,
+          traceId,
         );
+        let completedRecording: SavedRecording;
+
+        try {
+          completedRecording = await updateRecordingTranscription(
+            recording.id,
+            'complete',
+            result.text,
+            traceId,
+          );
+        } catch (error) {
+          throw new TranscriptionError(
+            {
+              code: 'LOCAL_PERSISTENCE_FAILED',
+              stage: 'recording_metadata_persisted',
+              traceId,
+            },
+            {
+              backendHost,
+              cause: error,
+              developerMessage:
+                error instanceof Error ? error.message : String(error),
+              requestDurationMs: Date.now() - startedAt,
+            },
+          );
+        }
+
         replaceRecording(completedRecording);
+        logTranscriptionEvent('info', 'RECORDING_METADATA_PERSISTED', traceId, {
+          recordingId: recording.id,
+          status: 'complete',
+        });
+        logTranscriptionEvent('info', 'REQUEST_COMPLETED', traceId, {
+          backendHost,
+          recordingId: recording.id,
+          requestDurationMs: Date.now() - startedAt,
+        });
         return true;
       } catch (error) {
-        console.warn('[RecorderTranscription] Transcription failed.', {
-          error: describeError(error),
-          recordingId: recording.id,
-          uri: recording.uri,
-        });
+        const transcriptionError = normalizeTranscriptionError(
+          error,
+          { stage: 'request_failed', traceId },
+          { backendHost, requestDurationMs: Date.now() - startedAt },
+        );
+        let terminalError = transcriptionError;
 
         if (transcribingStatusPersisted) {
           try {
@@ -661,18 +738,59 @@ export function RecorderProvider({ children }: PropsWithChildren) {
               recording.id,
               'failed',
               null,
+              traceId,
+              toTranscriptionFailureDetails(transcriptionError),
             );
             replaceRecording(failedRecording);
-          } catch (metadataError) {
-            console.error(
-              '[RecorderTranscription] Could not persist failed transcription state.',
+            logTranscriptionEvent(
+              'warn',
+              'RECORDING_METADATA_PERSISTED',
+              traceId,
               {
-                error: describeError(metadataError),
+                code: transcriptionError.code,
                 recordingId: recording.id,
+                status: 'failed',
+              },
+            );
+          } catch (metadataError) {
+            terminalError = new TranscriptionError(
+              {
+                code: 'LOCAL_PERSISTENCE_FAILED',
+                stage: 'recording_metadata_persisted',
+                traceId,
+              },
+              {
+                backendHost,
+                cause: metadataError,
+                developerMessage:
+                  metadataError instanceof Error
+                    ? metadataError.message
+                    : String(metadataError),
+                requestDurationMs: Date.now() - startedAt,
               },
             );
           }
         }
+
+        if (!transcribingStatusPersisted || terminalError !== transcriptionError) {
+          replaceRecording({
+            ...recording,
+            latestTranscriptionFailure:
+              toTranscriptionFailureDetails(terminalError),
+            transcript: null,
+            transcriptionStatus: 'failed',
+            transcriptionTraceId: traceId,
+          });
+        }
+
+        logTranscriptionEvent('error', 'REQUEST_FAILED', traceId, {
+          ...transcriptionErrorLogDetails(terminalError),
+          causeCode:
+            terminalError === transcriptionError
+              ? null
+              : transcriptionError.code,
+          recordingId: recording.id,
+        });
 
         return false;
       } finally {

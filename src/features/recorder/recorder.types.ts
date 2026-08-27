@@ -1,3 +1,5 @@
+import type { TranscriptionFailureDetails } from './recording-transcription.types';
+
 export type TranscriptionStatus =
   | 'none'
   | 'transcribing'
@@ -13,6 +15,8 @@ export interface SavedRecording {
   durationMillis: number;
   transcript: string | null;
   transcriptionStatus: TranscriptionStatus;
+  transcriptionTraceId: string | null;
+  latestTranscriptionFailure: TranscriptionFailureDetails | null;
 }
 
 export type RecorderPhase = 'idle' | 'starting' | 'recording' | 'stopping' | 'error';

@@ -1,67 +1,329 @@
 import { File } from 'expo-file-system';
 
 import { appConfig } from '../../config/app.config';
-import { createApiClient } from '../../services/api';
+import { ApiError, createApiClient } from '../../services/api';
+import {
+  getBackendHost,
+  isSafeBackendErrorResponse,
+  logTranscriptionEvent,
+  TranscriptionError,
+} from './recording-transcription.errors';
+import type {
+  SafeBackendErrorResponse,
+  TranscriptionErrorCode,
+  TranscriptionFileMetadata,
+  TranscriptionResult,
+  TranscriptionStage,
+} from './recording-transcription.types';
 import type { SavedRecording } from './recorder.types';
 
-interface TranscriptionResponse {
-  text: string;
+const MAX_TRANSCRIPTION_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+const TRANSCRIPTION_REQUEST_TIMEOUT_MS = 130_000;
+const M4A_EXTENSION = '.m4a';
+const DEFAULT_M4A_MIME_TYPE = 'audio/mp4';
+
+interface ErrorContext {
+  backendHost: string | null;
+  fileMetadata?: TranscriptionFileMetadata;
+  requestDurationMs: number;
+  traceId: string;
 }
 
-export class TranscriptionConfigurationError extends Error {
-  constructor() {
-    super('EXPO_PUBLIC_API_URL is not configured for transcription.');
-    this.name = 'TranscriptionConfigurationError';
-  }
+interface ReactNativeFormDataFile {
+  name: string;
+  type: typeof DEFAULT_M4A_MIME_TYPE;
+  uri: string;
 }
 
-const isTranscriptionResponse = (
-  value: unknown,
-): value is TranscriptionResponse =>
-  Boolean(
-    value &&
-      typeof value === 'object' &&
-      typeof (value as Partial<TranscriptionResponse>).text === 'string',
+const elapsedSince = (startedAt: number): number => Date.now() - startedAt;
+
+const createError = (
+  code: TranscriptionErrorCode,
+  stage: TranscriptionStage,
+  developerMessage: string,
+  context: ErrorContext,
+  extras: {
+    backendResponse?: SafeBackendErrorResponse;
+    cause?: unknown;
+    httpStatus?: number;
+  } = {},
+): TranscriptionError =>
+  new TranscriptionError(
+    { code, stage, traceId: context.traceId },
+    {
+      backendHost: context.backendHost,
+      developerMessage,
+      requestDurationMs: context.requestDurationMs,
+      ...(context.fileMetadata
+        ? { fileMetadata: context.fileMetadata }
+        : {}),
+      ...(extras.backendResponse
+        ? { backendResponse: extras.backendResponse }
+        : {}),
+      ...(extras.cause === undefined ? {} : { cause: extras.cause }),
+      ...(extras.httpStatus === undefined
+        ? {}
+        : { httpStatus: extras.httpStatus }),
+    },
   );
+
+const mapHttpStatusToCode = (status: number): TranscriptionErrorCode => {
+  if (status === 413) {
+    return 'FILE_TOO_LARGE';
+  }
+
+  if (status === 408 || status === 504) {
+    return 'REQUEST_TIMEOUT';
+  }
+
+  if (status === 429) {
+    return 'OPENAI_RATE_LIMITED';
+  }
+
+  if (status === 400 || status === 415 || status === 422) {
+    return 'UPLOAD_REJECTED';
+  }
+
+  if (status >= 500) {
+    return 'OPENAI_UPSTREAM_FAILED';
+  }
+
+  return 'INVALID_BACKEND_RESPONSE';
+};
+
+const mapApiError = (
+  error: ApiError,
+  context: ErrorContext,
+): TranscriptionError => {
+  const backendError = isSafeBackendErrorResponse(error.payload)
+    ? error.payload
+    : undefined;
+
+  if (backendError && backendError.traceId !== context.traceId) {
+    return createError(
+      'INVALID_BACKEND_RESPONSE',
+      'upload_started',
+      'The backend returned a different transcription trace ID.',
+      context,
+      { cause: error, httpStatus: error.status },
+    );
+  }
+
+  const code = backendError?.code ?? mapHttpStatusToCode(error.status);
+  const stage = backendError?.stage ?? 'upload_started';
+  return createError(
+    code,
+    stage,
+    backendError?.message ?? error.message,
+    context,
+    {
+      ...(backendError ? { backendResponse: backendError } : {}),
+      cause: error,
+      httpStatus: error.status,
+    },
+  );
+};
+
+const isAbortError = (error: unknown): boolean =>
+  error instanceof Error && error.name === 'AbortError';
+
+const collectFileMetadata = (audioFile: File): TranscriptionFileMetadata => ({
+  byteSize: audioFile.size,
+  extension: audioFile.extension.toLowerCase(),
+  mimeType: audioFile.type || DEFAULT_M4A_MIME_TYPE,
+});
 
 export const transcribeRecordingFile = async (
   recording: SavedRecording,
-): Promise<string> => {
+  traceId: string,
+): Promise<TranscriptionResult> => {
+  const startedAt = Date.now();
+  const backendHost = getBackendHost(appConfig.apiUrl);
+  let fileMetadata: TranscriptionFileMetadata | undefined;
+
   if (!appConfig.apiUrl) {
-    throw new TranscriptionConfigurationError();
+    throw createError(
+      'API_URL_MISSING',
+      'transcription_requested',
+      'EXPO_PUBLIC_API_URL is not configured for transcription.',
+      {
+        backendHost,
+        requestDurationMs: elapsedSince(startedAt),
+        traceId,
+      },
+    );
   }
 
-  const audioFile = new File(recording.uri);
+  let audioFile: File;
+
+  try {
+    audioFile = new File(recording.uri);
+  } catch (error) {
+    throw createError(
+      'INVALID_AUDIO_FILE',
+      'local_audio_file_located',
+      'The saved recording URI could not be opened as a file.',
+      {
+        backendHost,
+        requestDurationMs: elapsedSince(startedAt),
+        traceId,
+      },
+      { cause: error },
+    );
+  }
 
   if (!audioFile.exists) {
-    throw new Error('The recording audio file is missing.');
+    throw createError(
+      'LOCAL_FILE_MISSING',
+      'local_audio_file_located',
+      'The saved recording audio file does not exist.',
+      {
+        backendHost,
+        requestDurationMs: elapsedSince(startedAt),
+        traceId,
+      },
+    );
+  }
+
+  logTranscriptionEvent('info', 'LOCAL_AUDIO_FILE_LOCATED', traceId, {
+    backendHost,
+    recordingId: recording.id,
+  });
+
+  fileMetadata = collectFileMetadata(audioFile);
+  logTranscriptionEvent('info', 'FILE_METADATA_COLLECTED', traceId, {
+    backendHost,
+    fileMetadata,
+    recordingId: recording.id,
+  });
+
+  const context = (): ErrorContext => ({
+    backendHost,
+    fileMetadata,
+    requestDurationMs: elapsedSince(startedAt),
+    traceId,
+  });
+
+  if (fileMetadata.extension !== M4A_EXTENSION || fileMetadata.byteSize <= 0) {
+    throw createError(
+      'INVALID_AUDIO_FILE',
+      'file_metadata_collected',
+      'The saved recording must be a non-empty M4A file.',
+      context(),
+    );
+  }
+
+  if (fileMetadata.byteSize > MAX_TRANSCRIPTION_FILE_SIZE_BYTES) {
+    throw createError(
+      'FILE_TOO_LARGE',
+      'file_metadata_collected',
+      `The recording exceeds the ${MAX_TRANSCRIPTION_FILE_SIZE_BYTES}-byte upload limit.`,
+      context(),
+    );
   }
 
   const formData = new FormData();
-  const audioBlob = audioFile.slice(0, audioFile.size, 'audio/mp4');
-  const appendFile = formData.append.bind(formData) as (
+  const nativeAudioFile: ReactNativeFormDataFile = {
+    name: recording.filename || 'recording.m4a',
+    type: DEFAULT_M4A_MIME_TYPE,
+    uri: recording.uri,
+  };
+  const appendNativeFile = formData.append.bind(formData) as unknown as (
     name: string,
-    value: Blob,
-    filename: string,
+    value: ReactNativeFormDataFile,
   ) => void;
-  appendFile('file', audioBlob, recording.filename || 'recording.m4a');
+  appendNativeFile('file', nativeAudioFile);
 
   const apiClient = createApiClient({ baseUrl: appConfig.apiUrl });
-  const response = await apiClient.request<unknown, FormData>('/transcribe', {
-    method: 'POST',
-    body: formData,
-    bodyEncoding: 'form-data',
+  const abortController = new AbortController();
+  const timeout = setTimeout(
+    () => abortController.abort(),
+    TRANSCRIPTION_REQUEST_TIMEOUT_MS,
+  );
+
+  logTranscriptionEvent('info', 'UPLOAD_STARTED', traceId, {
+    backendHost,
+    fileMetadata,
+    recordingId: recording.id,
+    timeoutMs: TRANSCRIPTION_REQUEST_TIMEOUT_MS,
   });
 
-  if (!isTranscriptionResponse(response)) {
-    throw new Error('The transcription backend returned an invalid response.');
+  let response: unknown;
+
+  try {
+    response = await apiClient.request<unknown, FormData>('/transcribe', {
+      method: 'POST',
+      headers: {
+        Accept: 'text/plain',
+        'X-Atlas-Trace-Id': traceId,
+      },
+      body: formData,
+      bodyEncoding: 'form-data',
+      signal: abortController.signal,
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw mapApiError(error, context());
+    }
+
+    if (abortController.signal.aborted || isAbortError(error)) {
+      throw createError(
+        'REQUEST_TIMEOUT',
+        'upload_started',
+        `The transcription request exceeded ${TRANSCRIPTION_REQUEST_TIMEOUT_MS}ms.`,
+        context(),
+        { cause: error },
+      );
+    }
+
+    if (error instanceof TypeError) {
+      throw createError(
+        'BACKEND_UNREACHABLE',
+        'upload_started',
+        error.message,
+        context(),
+        { cause: error },
+      );
+    }
+
+    throw createError(
+      'UNKNOWN_TRANSCRIPTION_FAILURE',
+      'upload_started',
+      error instanceof Error ? error.message : String(error),
+      context(),
+      { cause: error },
+    );
+  } finally {
+    clearTimeout(timeout);
   }
 
-  const transcript = response.text.trim();
+  if (typeof response !== 'string') {
+    throw createError(
+      'INVALID_BACKEND_RESPONSE',
+      'openai_response_received',
+      'The transcription backend returned a non-text success response.',
+      context(),
+    );
+  }
+
+  const transcript = response.trim();
 
   if (!transcript) {
-    throw new Error('The transcription backend returned an empty transcript.');
+    throw createError(
+      'EMPTY_TRANSCRIPT',
+      'transcript_validated',
+      'The transcription backend returned an empty transcript.',
+      context(),
+    );
   }
 
-  return transcript;
+  logTranscriptionEvent('info', 'TRANSCRIPT_VALIDATED', traceId, {
+    backendHost,
+    characterCount: transcript.length,
+    fileMetadata,
+    recordingId: recording.id,
+    requestDurationMs: elapsedSince(startedAt),
+  });
+
+  return { text: transcript, traceId };
 };

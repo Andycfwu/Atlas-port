@@ -23,6 +23,7 @@ export function RecordingTranscript({
 }: RecordingTranscriptProps) {
   const [isRequesting, setIsRequesting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [technicalDetailsVisible, setTechnicalDetailsVisible] = useState(false);
 
   const requestTranscription = async () => {
     if (isRequesting || recording.transcriptionStatus === 'transcribing') {
@@ -33,11 +34,7 @@ export function RecordingTranscript({
     setMessage(null);
 
     try {
-      const completed = await onTranscribe();
-
-      if (!completed) {
-        setMessage('Atlas could not transcribe this recording. The audio is safe.');
-      }
+      await onTranscribe();
     } finally {
       setIsRequesting(false);
     }
@@ -67,6 +64,7 @@ export function RecordingTranscript({
   const hasTranscript =
     recording.transcriptionStatus === 'complete' &&
     Boolean(recording.transcript);
+  const failure = recording.latestTranscriptionFailure;
   const statusBadge = isTranscribing
     ? 'PROCESSING'
     : hasTranscript
@@ -115,12 +113,47 @@ export function RecordingTranscript({
           </View>
           <Text style={styles.emptyTitle}>Transcription needs attention</Text>
           <Text style={styles.emptyBody}>
-            Atlas could not finish the transcript. The saved audio remains playable.
+            {failure?.userMessage ??
+              'Atlas could not finish the transcript. The saved audio remains playable.'}
           </Text>
           <TranscriptAction
             label="Retry Transcription"
             onPress={requestTranscription}
           />
+          {__DEV__ && failure ? (
+            <View style={styles.technicalSection}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: technicalDetailsVisible }}
+                onPress={() =>
+                  setTechnicalDetailsVisible((current) => !current)
+                }
+                style={({ pressed }) => [
+                  styles.technicalToggle,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.technicalToggleText}>
+                  Technical details {technicalDetailsVisible ? '−' : '+'}
+                </Text>
+              </Pressable>
+              {technicalDetailsVisible ? (
+                <View style={styles.technicalDetails}>
+                  <TechnicalDetail label="Code" value={failure.code} />
+                  <TechnicalDetail label="Stage" value={failure.stage} />
+                  <TechnicalDetail label="Trace ID" value={failure.traceId} />
+                  <TechnicalDetail
+                    label="HTTP status"
+                    value={
+                      failure.httpStatus === undefined
+                        ? 'not available'
+                        : String(failure.httpStatus)
+                    }
+                  />
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       ) : (
         <View style={styles.emptyState}>
@@ -149,6 +182,22 @@ export function RecordingTranscript({
           {message}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+interface TechnicalDetailProps {
+  label: string;
+  value: string;
+}
+
+function TechnicalDetail({ label, value }: TechnicalDetailProps) {
+  return (
+    <View style={styles.technicalRow}>
+      <Text style={styles.technicalLabel}>{label}</Text>
+      <Text selectable style={styles.technicalValue}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -293,5 +342,44 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  technicalSection: {
+    alignSelf: 'stretch',
+    marginTop: 12,
+  },
+  technicalToggle: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  technicalToggleText: {
+    color: colors.mutedInk,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  technicalDetails: {
+    gap: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+  },
+  technicalRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  technicalLabel: {
+    color: colors.mutedInk,
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  technicalValue: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 9,
+    fontWeight: '700',
+    textAlign: 'right',
   },
 });

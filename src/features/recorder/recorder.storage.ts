@@ -11,6 +11,13 @@ import {
   waitForStableRecordingFile,
 } from './recorder.integrity';
 import type { RecordingFileValidation } from './recorder.integrity.types';
+import {
+  createTranscriptionTraceId,
+  getTranscriptionUserMessage,
+  isTranscriptionErrorCode,
+  isTranscriptionStage,
+} from './recording-transcription.errors';
+import type { TranscriptionFailureDetails } from './recording-transcription.types';
 import type {
   SavedRecording,
   TranscriptionStatus,
@@ -45,12 +52,47 @@ export class RecordingDeletionError extends Error {
   }
 }
 
-const isSavedRecording = (value: unknown): value is SavedRecording => {
+type BackwardCompatibleSavedRecording = Omit<
+  SavedRecording,
+  'latestTranscriptionFailure' | 'transcriptionTraceId'
+> & {
+  latestTranscriptionFailure?: unknown;
+  transcriptionTraceId?: unknown;
+};
+
+const isTranscriptionFailureDetails = (
+  value: unknown,
+): value is TranscriptionFailureDetails => {
   if (!value || typeof value !== 'object') {
     return false;
   }
 
-  const recording = value as Partial<SavedRecording>;
+  const failure = value as Partial<TranscriptionFailureDetails>;
+  return (
+    isTranscriptionErrorCode(failure.code) &&
+    typeof failure.userMessage === 'string' &&
+    failure.userMessage.length > 0 &&
+    typeof failure.traceId === 'string' &&
+    failure.traceId.length > 0 &&
+    isTranscriptionStage(failure.stage) &&
+    typeof failure.occurredAt === 'string' &&
+    Number.isFinite(Date.parse(failure.occurredAt)) &&
+    (failure.httpStatus === undefined ||
+      (typeof failure.httpStatus === 'number' &&
+        Number.isInteger(failure.httpStatus) &&
+        failure.httpStatus >= 100 &&
+        failure.httpStatus <= 599))
+  );
+};
+
+const isSavedRecording = (
+  value: unknown,
+): value is BackwardCompatibleSavedRecording => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const recording = value as Partial<BackwardCompatibleSavedRecording>;
 
   return (
     typeof recording.id === 'string' &&
@@ -73,6 +115,27 @@ const isSavedRecording = (value: unknown): value is SavedRecording => {
     )
   );
 };
+
+const normalizeSavedRecording = (
+  recording: BackwardCompatibleSavedRecording,
+): SavedRecording => ({
+  ...recording,
+  latestTranscriptionFailure: isTranscriptionFailureDetails(
+    recording.latestTranscriptionFailure,
+  )
+    ? {
+        ...recording.latestTranscriptionFailure,
+        userMessage: getTranscriptionUserMessage(
+          recording.latestTranscriptionFailure.code,
+        ),
+      }
+    : null,
+  transcriptionTraceId:
+    typeof recording.transcriptionTraceId === 'string' &&
+    recording.transcriptionTraceId.length > 0
+      ? recording.transcriptionTraceId
+      : null,
+});
 
 interface ResolvedRecordingFile {
   exists: boolean;
@@ -128,6 +191,7 @@ const readRecordingsForMutation = async (): Promise<SavedRecording[]> => {
   return sortRecordingsNewestFirst(
     parsed
       .filter(isSavedRecording)
+      .map(normalizeSavedRecording)
       .map((recording) => resolveRecordingFile(recording, directory).recording),
   );
 };
@@ -173,10 +237,48 @@ export const loadRecordings = async (): Promise<SavedRecording[]> => {
         return;
       }
 
+      const normalizedEntry = normalizeSavedRecording(entry);
+      const storedFailureIsValid =
+        entry.latestTranscriptionFailure === null ||
+        isTranscriptionFailureDetails(entry.latestTranscriptionFailure);
+      const storedTraceIsValid =
+        entry.transcriptionTraceId === null ||
+        (typeof entry.transcriptionTraceId === 'string' &&
+          entry.transcriptionTraceId.length > 0);
+      const storedUserMessageIsCurrent =
+        !isTranscriptionFailureDetails(entry.latestTranscriptionFailure) ||
+        entry.latestTranscriptionFailure.userMessage ===
+          getTranscriptionUserMessage(entry.latestTranscriptionFailure.code);
+
+      if (
+        entry.transcriptionTraceId === undefined ||
+        entry.latestTranscriptionFailure === undefined ||
+        !storedTraceIsValid ||
+        !storedFailureIsValid ||
+        !storedUserMessageIsCurrent
+      ) {
+        shouldCleanMetadata = true;
+      }
+
+      const interruptedTraceId =
+        normalizedEntry.transcriptionTraceId ?? createTranscriptionTraceId();
       const retryableEntry: SavedRecording =
-        entry.transcriptionStatus === 'transcribing'
-          ? { ...entry, transcriptionStatus: 'failed' }
-          : entry;
+        normalizedEntry.transcriptionStatus === 'transcribing'
+          ? {
+              ...normalizedEntry,
+              transcriptionStatus: 'failed',
+              transcriptionTraceId: interruptedTraceId,
+              latestTranscriptionFailure: {
+                code: 'TRANSCRIPTION_INTERRUPTED',
+                userMessage: getTranscriptionUserMessage(
+                  'TRANSCRIPTION_INTERRUPTED',
+                ),
+                traceId: interruptedTraceId,
+                stage: 'request_failed',
+                occurredAt: new Date().toISOString(),
+              },
+            }
+          : normalizedEntry;
 
       if (retryableEntry !== entry) {
         shouldCleanMetadata = true;
@@ -184,7 +286,7 @@ export const loadRecordings = async (): Promise<SavedRecording[]> => {
         if (__DEV__) {
           console.warn(
             '[RecorderStorage] Reset interrupted transcription to retryable.',
-            { recordingId: entry.id },
+            { recordingId: entry.id, traceId: interruptedTraceId },
           );
         }
       }
@@ -379,6 +481,8 @@ export const persistVerifiedRecordingFile = async (
         durationMillis: destinationDurationMillis,
         transcript: null,
         transcriptionStatus: 'none',
+        transcriptionTraceId: null,
+        latestTranscriptionFailure: null,
       },
     };
   } catch (error) {
@@ -417,6 +521,8 @@ export const updateRecordingTranscription = async (
   recordingId: string,
   transcriptionStatus: TranscriptionStatus,
   transcript: string | null,
+  traceId: string,
+  failure?: TranscriptionFailureDetails,
 ): Promise<SavedRecording> => {
   const recordings = await readRecordingsForMutation();
   const recording = recordings.find((item) => item.id === recordingId);
@@ -435,6 +541,9 @@ export const updateRecordingTranscription = async (
     ...recording,
     transcript: normalizedTranscript,
     transcriptionStatus,
+    transcriptionTraceId: traceId,
+    latestTranscriptionFailure:
+      failure ?? recording.latestTranscriptionFailure,
   };
   writeRecordingMetadata(
     recordings.map((item) =>
