@@ -2,6 +2,7 @@ export type LiveTranscriptionStatus =
   | 'idle'
   | 'connecting'
   | 'streaming'
+  | 'finishing'
   | 'paused'
   | 'failed'
   | 'completed';
@@ -16,6 +17,9 @@ export interface LiveTranscriptionState {
 
 export interface LiveTranscriptionStartOptions {
   recorderSessionId: string;
+  actualSampleRate: number | null;
+  captureError?: string | undefined;
+  forceFailure?: boolean;
 }
 
 export interface LiveTranscriptionStreamMetadata {
@@ -27,7 +31,9 @@ export interface LiveTranscriptionStreamMetadata {
 }
 
 export type LiveTranscriptionServerMessage =
+  | { type: 'committed'; itemId: string; previousItemId: string | null; traceId: string }
   | {
+      backendRevision: string | null;
       resampling: boolean;
       targetSampleRate: number;
       traceId: string;

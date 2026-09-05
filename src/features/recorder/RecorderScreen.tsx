@@ -69,7 +69,7 @@ export function RecorderScreen({ onOpenRecording }: RecorderScreenProps) {
           phase={phase}
         />
 
-        {isRecording || phase === 'stopping' ? (
+        {liveTranscription.status !== 'idle' ? (
           <LiveTranscriptDraft state={liveTranscription} />
         ) : null}
 

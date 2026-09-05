@@ -172,9 +172,9 @@ before production use.
 
 ### Foreground live-transcription spike
 
-After the authoritative M4A recorder reports a native recording confirmation,
-the application starts a second Expo Audio `useAudioStream` capture requesting
-mono, int16 PCM at 24 kHz. PCM is sent incrementally to the backend at
+RecorderProvider prepares optional Expo Audio `useAudioStream` capture before
+preparing the M4A recorder, then reapplies recording audio mode. Only after M4A
+capture is confirmed does the network consumer connect. Mono int16 PCM is sent to
 `WS /live-transcribe`; it is never retained as a complete recording in
 JavaScript and is never written into recording metadata.
 
@@ -185,12 +185,20 @@ connecting to an OpenAI `gpt-live-transcribe` transcription session. Both client
 and backend enforce bounded 512 KB audio queues and message/connection limits.
 
 The Recorder screen labels this text **Live draft**. It is provisional and is
-not saved as the recording transcript. Stop & Save first ends the PCM stream,
-then follows the existing M4A stop, integrity validation, persistence, and
+not saved as the recording transcript. Stop & Save drains the live connection
+independently, stops the M4A recorder, then releases PCM capture and performs
+integrity validation, persistence, and
 `POST /transcribe` flow. The final `gpt-transcribe` result remains authoritative.
 If the WebSocket, network, or upstream session fails, only the live draft stops;
 the M4A recorder continues. Backgrounding or locking pauses the live spike and
 does not change the background recorder or global audio-session coordinator.
+
+The Realtime socket uses `?intent=transcription`, with `gpt-live-transcribe`
+selected in `session.audio.input.transcription.model`. The live network hook
+never starts/stops native capture. Failure stays visible after Stop. See
+[the repair notes and physical-device test matrix](docs/recording-live-repair.md).
+The [foreground live verification](docs/live-transcription-verification.md) covers
+the final iOS startup order, backend freshness checks, and confirmed iPhone results.
 
 ### Audio-session coordination
 

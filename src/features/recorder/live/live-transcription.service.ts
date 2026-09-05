@@ -8,6 +8,7 @@ import type {
 const MAX_QUEUED_AUDIO_BYTES = 512 * 1024;
 const MAX_SOCKET_BUFFERED_BYTES = 512 * 1024;
 const READY_TIMEOUT_MS = 10_000;
+const FINISH_TIMEOUT_MS = 15_000;
 const QUEUE_RETRY_MS = 20;
 
 type LiveConnectionFailureCode =
@@ -32,7 +33,7 @@ interface LiveTranscriptionConnectionCallbacks {
   onCompleted: () => void;
   onDraft: (draft: string) => void;
   onFailure: (error: LiveTranscriptionConnectionError) => void;
-  onReady: () => void;
+  onReady: (backendRevision: string | null) => void;
 }
 
 interface TranscriptSegment {
@@ -111,7 +112,7 @@ export const parseLiveTranscriptionServerMessage = (
     return typeof targetSampleRate === 'number' &&
       Number.isFinite(targetSampleRate) &&
       typeof resampling === 'boolean'
-      ? { resampling, targetSampleRate, traceId, type }
+      ? { backendRevision: readString(parsed, 'backendRevision'), resampling, targetSampleRate, traceId, type }
       : null;
   }
 
@@ -135,12 +136,17 @@ export const parseLiveTranscriptionServerMessage = (
     return { traceId, type };
   }
 
+  if (type === 'committed') {
+    const itemId = readString(parsed, 'itemId');
+    return itemId ? { type, itemId, previousItemId: readString(parsed, 'previousItemId'), traceId } : null;
+  }
+
   if (type === 'error') {
     const code = readString(parsed, 'code');
     const message = readString(parsed, 'message');
     const stage = readString(parsed, 'stage');
     return code && message && stage
-      ? { code, message, stage, traceId, type }
+        ? { code, message, stage, traceId, type }
       : null;
   }
 
@@ -156,8 +162,12 @@ export class LiveTranscriptionConnection {
   private readonly audioQueue: ArrayBuffer[] = [];
   private readonly segmentOrder: string[] = [];
   private readonly segments = new Map<string, TranscriptSegment>();
+  private readonly committedOrder: string[] = [];
   private audioQueueBytes = 0;
   private completeRequested = false;
+  private completeSent = false;
+  private closed = false;
+  private finishTimer: ReturnType<typeof setTimeout> | null = null;
   private failed = false;
   private pumpTimer: ReturnType<typeof setTimeout> | null = null;
   private ready = false;
@@ -214,7 +224,7 @@ export class LiveTranscriptionConnection {
     socket.onclose = (event) => {
       this.clearTimers();
 
-      if (!this.completeRequested && !this.failed) {
+      if (!this.closed && !this.failed) {
         this.fail(
           new LiveTranscriptionConnectionError(
             'LIVE_CONNECTION_CLOSED',
@@ -266,21 +276,14 @@ export class LiveTranscriptionConnection {
     }
 
     this.completeRequested = true;
-    this.clearPumpTimer();
-
-    if (this.socket?.readyState === WebSocket.OPEN && this.ready) {
-      for (const buffer of this.audioQueue) {
-        this.socket.send(buffer);
-      }
-      this.socket.send(JSON.stringify({ type: 'complete' }));
-    }
-
-    this.audioQueue.length = 0;
-    this.audioQueueBytes = 0;
-    this.close('recording_stopped');
+    this.finishTimer = setTimeout(() => this.fail(new LiveTranscriptionConnectionError(
+      'LIVE_CONNECTION_TIMEOUT', 'The live transcript did not finish in time. Use saved-file transcription.',
+    )), FINISH_TIMEOUT_MS);
+    this.schedulePump(0);
   }
 
   close(reason: string): void {
+    this.closed = true;
     this.completeRequested = true;
     this.clearTimers();
     this.audioQueue.length = 0;
@@ -299,6 +302,7 @@ export class LiveTranscriptionConnection {
   }
 
   private handleServerMessage(rawMessage: unknown): void {
+    if (this.closed || this.failed) return;
     const message = parseLiveTranscriptionServerMessage(rawMessage);
 
     if (!message || message.traceId !== this.metadata.traceId) {
@@ -314,7 +318,7 @@ export class LiveTranscriptionConnection {
     if (message.type === 'ready') {
       this.ready = true;
       this.clearReadyTimer();
-      this.callbacks.onReady();
+      this.callbacks.onReady(message.backendRevision);
       this.schedulePump(0);
       return;
     }
@@ -324,12 +328,22 @@ export class LiveTranscriptionConnection {
       return;
     }
 
+    if (message.type === 'committed') {
+      if (!this.committedOrder.includes(message.itemId)) this.committedOrder.push(message.itemId);
+      this.emitDraft();
+      return;
+    }
+
     if (message.type === 'final') {
       this.updateSegment(message.itemId, '', message.transcript);
       return;
     }
 
     if (message.type === 'completed') {
+      if (!this.completeSent) {
+        this.fail(new LiveTranscriptionConnectionError('LIVE_INVALID_RESPONSE', 'The backend completed before audio was drained.'));
+        return;
+      }
       this.callbacks.onCompleted();
       this.close('stream_completed');
       return;
@@ -338,7 +352,7 @@ export class LiveTranscriptionConnection {
     this.fail(
       new LiveTranscriptionConnectionError(
         'LIVE_CONNECTION_FAILED',
-        `${message.code}: ${message.message}`,
+        `${message.code} (${message.stage}): ${message.message}`,
       ),
     );
   }
@@ -359,7 +373,12 @@ export class LiveTranscriptionConnection {
       final: final ?? existing?.final ?? null,
     });
 
-    const draft = this.segmentOrder
+    this.emitDraft();
+  }
+
+  private emitDraft(): void {
+    const order = [...this.committedOrder, ...this.segmentOrder.filter((id) => !this.committedOrder.includes(id))];
+    const draft = order
       .map((id) => {
         const segment = this.segments.get(id);
         return (segment?.final ?? segment?.draft ?? '').trim();
@@ -370,7 +389,7 @@ export class LiveTranscriptionConnection {
   }
 
   private schedulePump(delay: number): void {
-    if (this.pumpTimer || !this.ready || this.completeRequested || this.failed) {
+    if (this.pumpTimer || !this.ready || this.closed || this.failed) {
       return;
     }
 
@@ -395,6 +414,14 @@ export class LiveTranscriptionConnection {
     const next = this.audioQueue.shift();
 
     if (!next) {
+      if (this.completeRequested && !this.completeSent) {
+        try {
+          this.completeSent = true;
+          socket.send(JSON.stringify({ type: 'complete' }));
+        } catch {
+          this.fail(new LiveTranscriptionConnectionError('LIVE_CONNECTION_FAILED', 'Could not finish the live stream.'));
+        }
+      }
       return;
     }
 
@@ -412,13 +439,13 @@ export class LiveTranscriptionConnection {
       return;
     }
 
-    if (this.audioQueue.length > 0) {
+    if (this.audioQueue.length > 0 || this.completeRequested) {
       this.schedulePump(0);
     }
   }
 
   private fail(error: LiveTranscriptionConnectionError): void {
-    if (this.failed || this.completeRequested) {
+    if (this.failed || this.closed) {
       return;
     }
 
@@ -442,6 +469,8 @@ export class LiveTranscriptionConnection {
   }
 
   private clearTimers(): void {
+    if (this.finishTimer) clearTimeout(this.finishTimer);
+    this.finishTimer = null;
     this.clearPumpTimer();
     this.clearReadyTimer();
   }

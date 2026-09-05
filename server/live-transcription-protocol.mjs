@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer';
+
 const TARGET_SAMPLE_RATE = 24_000;
 const MIN_SAMPLE_RATE = 8_000;
 const MAX_SAMPLE_RATE = 96_000;
@@ -6,14 +8,21 @@ const TRACE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const isRecord = (value) =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
-const sanitizeDiagnosticMessage = (message) =>
+export const sanitizeDiagnosticMessage = (message) =>
   message
     .replace(/sk-[A-Za-z0-9_-]{8,}/g, '[REDACTED_API_KEY]')
     .replace(/Bearer\s+[^\s"']+/gi, 'Bearer [REDACTED]')
     .replace(
       /(?:file:\/\/|\/(?:private|Users|var|data|tmp)\/)[^\s"'<>]+/gi,
       '[REDACTED_LOCAL_PATH]',
-    );
+    )
+    .replace(/(?:[A-Za-z]:\\)[^\s"'<>]+/g, '[REDACTED_LOCAL_PATH]')
+    .replace(/(["']?(?:api[_-]?key|authorization|token|audio)["']?)\s*[=:]\s*(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi, '$1=[REDACTED]')
+    .replace(/[A-Za-z0-9+/=_-]{80,}/g, '[REDACTED_PAYLOAD]')
+    .replace(/[\r\n\t]/g, ' ')
+    .slice(0, 600);
+
+const safeField = (value) => typeof value === 'string' ? sanitizeDiagnosticMessage(value) : null;
 
 const readString = (value, key) =>
   typeof value?.[key] === 'string' ? value[key] : null;
@@ -27,11 +36,17 @@ export class LiveTranscriptionServerError extends Error {
     this.name = 'LiveTranscriptionServerError';
     this.code = code;
     this.closeCode = closeCode;
-    this.stage = stage;
+    this.stage = cause?.stage ?? stage;
     this.diagnosticMessage = sanitizeDiagnosticMessage(
       cause instanceof Error ? cause.message : message,
     );
-    this.diagnosticName = cause instanceof Error ? cause.name : this.name;
+    this.diagnosticName = safeField(cause instanceof Error ? cause.name : this.name);
+    this.upstreamCode = safeField(cause?.code);
+    this.upstreamType = safeField(cause?.type);
+    this.upstreamParam = safeField(cause?.param);
+    this.upstreamRequestId = safeField(cause?.requestId);
+    this.upstreamEventId = safeField(cause?.eventId);
+    this.upstreamStatus = Number.isFinite(cause?.statusCode) ? cause.statusCode : Number.isFinite(cause?.status) ? cause.status : null;
   }
 }
 
@@ -141,12 +156,9 @@ export const createOpenAITranscriptionSessionUpdate = () => ({
         transcription: {
           model: 'gpt-live-transcribe',
         },
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 500,
-        },
+        // gpt-live-transcribe emits deltas before commit. Atlas commits bounded
+        // turns and explicitly drains the final turn at Stop.
+        turn_detection: null,
       },
     },
   },

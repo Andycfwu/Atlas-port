@@ -19,8 +19,9 @@ import {
   type RecordingOptions,
   useAudioRecorder,
   useAudioRecorderState,
+  useAudioStream,
 } from 'expo-audio';
-import { AppState, Linking } from 'react-native';
+import { AppState, Linking, Platform } from 'react-native';
 
 import { appConfig } from '../../config/app.config';
 import { useAudioSession } from '../../services/audio';
@@ -38,6 +39,7 @@ import type {
   RecordingFileValidation,
 } from './recorder.integrity.types';
 import { useLiveTranscription } from './live';
+import { prepareRecordingCapture, RecorderPcmCapture } from './recorder.capture';
 import type { LiveTranscriptionState } from './live';
 import {
   createTranscriptionTraceId,
@@ -52,6 +54,8 @@ import {
   deleteRecording as deleteStoredRecording,
   loadRecordings,
   persistVerifiedRecordingFile,
+  preserveRecordingRecoveryReport,
+  removePersistedRecordingSource,
   renameRecording as renameStoredRecording,
   saveRecordingMetadata,
   updateRecordingTranscription,
@@ -120,7 +124,9 @@ const NATIVE_START_POLL_MS = 50;
 const NATIVE_METERING_SENTINEL_DB = -120;
 const START_ERROR = 'Atlas could not start recording. Please try again.';
 const INTEGRITY_ERROR =
-  'The recording file did not pass integrity validation. The diagnostic file was preserved.';
+  'This recording may be incomplete and was not saved as a complete library recording. The original audio was preserved for recovery.';
+const LIVE_ENABLED = process.env.EXPO_PUBLIC_LIVE_TRANSCRIPTION_MODE !== 'off';
+const FORCE_LIVE_FAILURE = __DEV__ && process.env.EXPO_PUBLIC_LIVE_TRANSCRIPTION_MODE === 'force-failure';
 const INTERRUPTION_ERROR = 'The microphone session was interrupted. Start a new recording.';
 
 const describeError = (error: unknown): string =>
@@ -252,10 +258,21 @@ export function RecorderProvider({ children }: PropsWithChildren) {
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder, 200);
   const {
+    resetLiveTranscription,
+    sendLiveAudio,
     startLiveTranscription,
     state: liveTranscription,
     stopLiveTranscription,
   } = useLiveTranscription();
+  const { stream } = useAudioStream({ channels: 1, encoding: 'int16', sampleRate: 24_000, onBuffer: sendLiveAudio });
+  const pcmCapture = useMemo(() => new RecorderPcmCapture(stream, () => recorder.isRecording), [recorder, stream]);
+  const releasePcmCapture = useCallback(() => {
+    try {
+      pcmCapture.release();
+    } catch (error) {
+      console.warn('[Recorder] PCM cleanup failed; file finalization remains independent.', describeError(error));
+    }
+  }, [pcmCapture]);
 
   useEffect(() => {
     recorderStateRef.current = recorderState;
@@ -274,6 +291,8 @@ export function RecorderProvider({ children }: PropsWithChildren) {
   const restoreSoundPlayback = useCallback(
     async (sessionId: string | null, reason: string) => {
       try {
+        // Only the recording owner releases PCM, after the M4A has stopped.
+        releasePcmCapture();
         const restored = await finishMicrophoneRecording({ reason, sessionId });
 
         if (restored) {
@@ -286,7 +305,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         });
       }
     },
-    [enableSounds, finishMicrophoneRecording],
+    [enableSounds, finishMicrophoneRecording, releasePcmCapture],
   );
 
   const stopNativeRecorderOnce = useCallback(
@@ -354,7 +373,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       session?.nativeRecordingConfirmedAt &&
       !session.failed &&
       !operationInProgressRef.current &&
-      (!recorder.isRecording || !recorderState.isRecording)
+      (!recorder.isRecording || !recorder.getStatus().isRecording)
     ) {
       stopLiveTranscription('authoritative_recorder_stopped', 'failed');
       markSessionFailed(
@@ -510,6 +529,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       }
 
       operationInProgressRef.current = true;
+      resetLiveTranscription();
       setOperationPhase('starting');
       setErrorMessage(null);
       const session: ActiveRecordingSession = {
@@ -541,32 +561,33 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         logRecorderIntegrity(session.sessionId, 'AUDIO_MODE_RECORDING_REQUESTED', {
           recorderId: recorder.id,
         });
-        const audioSessionReady = await prepareMicrophoneRecording({
-          reason: 'recorder_start',
-          sessionId: session.sessionId,
-        });
-
-        if (!audioSessionReady) {
-          throw new Error('The microphone audio session request became stale.');
-        }
-
-        logRecorderIntegrity(session.sessionId, 'AUDIO_MODE_RECORDING_READY', {
-          nativeIsRecording: recorder.isRecording,
-          recorderId: recorder.id,
-          recorderStatus: recorder.getStatus(),
-        });
-        logRecorderIntegrity(session.sessionId, 'PREPARE_STARTED', {
-          recorderId: recorder.id,
-          recorderStatus: recorder.getStatus(),
-          recorderUri: recorder.uri,
-        });
-        await recorder.prepareToRecordAsync(RECORDING_OPTIONS);
-        const preparedStatus = recorder.getStatus();
-        logRecorderIntegrity(session.sessionId, 'PREPARE_FINISHED', {
-          nativeIsRecording: recorder.isRecording,
-          recorderId: recorder.id,
-          recorderStatus: preparedStatus,
-          recorderUri: recorder.uri,
+        const { actualSampleRate: liveCaptureRate, captureError: liveCaptureError } = await prepareRecordingCapture({
+          platform: Platform.OS,
+          liveEnabled: testKind === 'normal' && LIVE_ENABLED,
+          capture: pcmCapture,
+          prepareAudioSession: (prepareCapture) => prepareMicrophoneRecording({
+            reason: 'recorder_start', sessionId: session.sessionId,
+            ...(prepareCapture ? { prepareCapture } : {}),
+          }),
+          prepareFile: async () => {
+            logRecorderIntegrity(session.sessionId, 'AUDIO_MODE_RECORDING_READY', {
+              nativeIsRecording: recorder.isRecording,
+              recorderId: recorder.id,
+              recorderStatus: recorder.getStatus(),
+            });
+            logRecorderIntegrity(session.sessionId, 'PREPARE_STARTED', {
+              recorderId: recorder.id,
+              recorderStatus: recorder.getStatus(),
+              recorderUri: recorder.uri,
+            });
+            await recorder.prepareToRecordAsync(RECORDING_OPTIONS);
+            logRecorderIntegrity(session.sessionId, 'PREPARE_FINISHED', {
+              nativeIsRecording: recorder.isRecording,
+              recorderId: recorder.id,
+              recorderStatus: recorder.getStatus(),
+              recorderUri: recorder.uri,
+            });
+          },
         });
 
         if (recorder.id !== session.recorderId) {
@@ -599,8 +620,8 @@ export function RecorderProvider({ children }: PropsWithChildren) {
           sourceUri: confirmation.sourceUri,
         });
 
-        if (testKind === 'normal') {
-          void startLiveTranscription({ recorderSessionId: session.sessionId });
+        if (testKind === 'normal' && LIVE_ENABLED) {
+          void startLiveTranscription({ recorderSessionId: session.sessionId, actualSampleRate: liveCaptureRate, captureError: liveCaptureError, forceFailure: FORCE_LIVE_FAILURE });
         }
 
         return session;
@@ -632,6 +653,8 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       ensurePermission,
       markSessionFailed,
       prepareMicrophoneRecording,
+      pcmCapture,
+      resetLiveTranscription,
       recorder,
       restoreSoundPlayback,
       startLiveTranscription,
@@ -833,12 +856,10 @@ export function RecorderProvider({ children }: PropsWithChildren) {
     async (
       sessionId: string,
       sourceValidation: RecordingFileValidation,
-      allowPlayableDiagnostic = false,
     ) => {
       const persisted = await persistVerifiedRecordingFile(
         sessionId,
         sourceValidation,
-        { allowPlayableDiagnostic },
       );
 
       try {
@@ -856,6 +877,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         recordingId: persisted.recording.id,
         uri: persisted.recording.uri,
       });
+      removePersistedRecordingSource(sourceValidation.uri);
       setRecordings((current) => [
         persisted.recording,
         ...current.filter((item) => item.id !== persisted.recording.id),
@@ -919,6 +941,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
 
     try {
       await stopNativeRecorderOnce(session);
+      releasePcmCapture();
       logRecorderIntegrity(session.sessionId, 'STOP_FINISHED', {
         nativeIsRecording: recorder.isRecording,
         recorderId: recorder.id,
@@ -1011,6 +1034,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       };
 
       if (!sourceValidation.passed) {
+        preserveRecordingRecoveryReport(result);
         appendIntegrityResult(result);
         console.warn('[RecorderIntegrity] Source validation failed.', result);
         setNativeRecordingConfirmed(false);
@@ -1019,7 +1043,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         await restoreSoundPlayback(session.sessionId, 'recording_validation_failed');
 
         if (session.testKind === 'normal') {
-          setErrorMessage(INTEGRITY_ERROR);
+          setErrorMessage(`${INTEGRITY_ERROR} Captured ${Math.round(statusBeforeStop.durationMillis / 100) / 10}s; playable ${Math.round((sourceValidation.playerDurationMillis ?? 0) / 100) / 10}s. Recovery ID: ${session.sessionId}.`);
           setOperationPhase('error');
         } else {
           setOperationPhase('idle');
@@ -1098,6 +1122,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       };
       appendIntegrityResult(result);
       console.warn('[RecorderIntegrity] Recording finalization failed.', result);
+      preserveRecordingRecoveryReport(result);
 
       if (!recorder.isRecording) {
         setNativeRecordingConfirmed(false);
@@ -1120,6 +1145,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
     appendIntegrityResult,
     markSessionFailed,
     persistRecordingToLibrary,
+    releasePcmCapture,
     recorder,
     restoreSoundPlayback,
     stopNativeRecorderOnce,
@@ -1206,7 +1232,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       const result = integrityResults.find((item) => item.sessionId === sessionId);
 
       if (
-        !result?.sourceValidation?.isPlayable ||
+        !result?.passed || !result.sourceValidation?.passed ||
         result.libraryRecordingId
       ) {
         return;
@@ -1218,7 +1244,6 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         const persisted = await persistRecordingToLibrary(
           result.sessionId,
           result.sourceValidation,
-          true,
         );
         const persistenceChecks: RecorderIntegrityCheck[] = [
           ...persisted.destinationValidation.checks.filter(

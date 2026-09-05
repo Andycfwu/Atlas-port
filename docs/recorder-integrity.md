@@ -4,6 +4,9 @@ This document records the Expo SDK 57 recorder audit and the acceptance path for
 physical audio files. The M4A file—not the visible timer or metadata—is the
 source of truth.
 
+For the September 5 live-failure truncation repair, trace correlation, and
+the live off/on/forced-failure device matrix, see [Recording and live repair](recording-live-repair.md).
+
 ## Authoritative lifecycle
 
 ~~~mermaid
@@ -11,7 +14,8 @@ flowchart TD
   A[Start button] --> B[Acquire operation mutex]
   B --> C[Confirm microphone permission]
   C --> D[Stop animal and saved-recording players]
-  D --> E[Request serialized recording audio mode]
+  D --> E0[Prepare optional PCM capture under microphone lock]
+  E0 --> E[Apply serialized recording audio mode]
   E --> F[prepareToRecordAsync with stable module options]
   F --> G[Capture recorder ID, URI, and status]
   G --> H[Call record]
@@ -20,24 +24,26 @@ flowchart TD
   J --> K[Restore playback mode only after native recorder is inactive]
   I -- Yes --> L[Store native confirmation time]
   L --> M[Start provider recording state, timer, metering, and background UI]
-  M --> M2[Start optional foreground PCM live draft stream]
+  M --> M2[Connect optional live network consumer]
   M2 --> N[Stop button]
-  N --> N2[Stop PCM stream and close live WebSocket]
+  N --> N2[Drain live network consumer independently]
   N2 --> O[Acquire the same operation mutex]
   O --> P[Capture recorder ID, URI, status URL, duration, reset state]
   P --> Q[Call centralized native stop exactly once]
-  Q --> R[Capture post-stop URI and status]
+  Q --> R0[Release PCM capture after native Stop]
+  R0 --> R[Capture post-stop URI and status]
   R --> S[Poll exact native file until size and modification time stabilize]
   S --> T[Load exact URI with Expo Audio player]
   T --> U[Compare playable duration with native pre-stop duration]
   U -- Invalid --> V[Preserve diagnostic file; no successful metadata]
   U -- Valid and raw test --> W[Preserve original native URI; no move or metadata]
-  U -- Valid and production or normal --> X[Move into Documents recordings without precreating destination]
+  U -- Valid and production or normal --> X[Copy into Documents recordings]
   X --> Y[Verify destination size and playable duration]
   Y --> Z[Write recordings JSON using player duration]
   V --> AA[Restore playback mode]
   W --> AA
-  Z --> AA
+  Z --> Z0[Remove original only after metadata succeeds]
+  Z0 --> AA
 ~~~
 
 ## Lifecycle audit
@@ -66,19 +72,20 @@ flowchart TD
   This order is intentional: the isolated physical-device reproduction failed
   whenever an idle Expo Audio player was constructed before the recorder, and
   passed when the recorder was constructed first.
-- The only normal source-file move is in persistVerifiedRecordingFile, after
-  source existence, stable size, playable load, and duration validation.
+- persistVerifiedRecordingFile copies after source existence, stable size,
+  playable load, and duration validation. The original remains until library
+  metadata is durable. Failed recordings get separate recovery manifests.
 - The optional foreground live-draft path uses one `useAudioStream` capture in
-  RecorderProvider. It starts only after the authoritative recorder receives
-  native confirmation, stops before the authoritative Stop operation, and does
-  not own the audio session or M4A lifecycle. There is still no second
+  RecorderProvider. It starts before preparing the authoritative recorder and
+  stops only after native M4A Stop. Network failure, background pause, and live
+  hook cleanup have no native audio controls. There is still no second
   `useAudioRecorder`, expo-av recorder, or third-party recorder library.
 - There is no mounted video component or expo-video / react-native-video
   dependency.
 
 ## Installed Expo iOS behavior relevant to the incident
 
-The installed Expo Audio iOS implementation has three important behaviors:
+The installed Expo Audio iOS implementation has these relevant behaviors:
 
 1. Preparing while its wrapper state is recording stops the current
    AVAudioRecorder, then replaces it with a newly prepared recorder and URI.
@@ -89,6 +96,9 @@ The installed Expo Audio iOS implementation has three important behaviors:
 4. Unless `keepAudioSessionActive` is enabled, pausing a player schedules
    `AVAudioSession.setActive(false)` 100 ms later. That delayed native task
    checks whether a player is active, but does not check active recorders.
+5. AudioStream.start changes the shared audio-session category to record /
+   measurement. AudioStream.stop deactivates that session without checking the
+   M4A recorder. Its lifetime must belong to RecorderProvider.
 
 For that reason, wrapper status and a counting duration are insufficient proof.
 Start acceptance also requires AudioRecorder.isRecording and a metering value
@@ -96,7 +106,7 @@ above Expo's pre-input `-120` dB sentinel. The timer therefore remains off when
 iOS claims to be recording but has not delivered a microphone frame. Every
 playback mode transition probes and rejects an active native recorder.
 
-Two conditions contributed to the physical-file truncation. The full provider
+The earlier player-order investigation recorded two conditions. The full provider
 tree constructed its long-lived saved-recording player before the recorder; an
 isolated player-first reproduction created the same 22 ms file and `-120`
 metering sentinel, while recorder-first produced a healthy 5-second file.
@@ -120,11 +130,11 @@ Set this only in a development environment:
 
 The Recorder screen exposes two manually initiated tests. The 10-second raw test
 leaves the exact native source at its document URI. The 10-second production
-test uses the same finalization, move, destination verification, metadata write,
+test uses the same finalization, copy, destination verification, metadata write,
 and library-state update as normal Stop & Save. Only one test runs at a time.
 
 Every result retains the requested duration, native pre-Stop duration, playable
 duration, file size, source URI, destination URI, and a check-by-check failure
-list. A playable diagnostic source can be deliberately saved with the panel's
+list. Only a diagnostic source that passes all integrity checks can use the panel's
 Save Test Recording to Library action, which calls the same production storage
 and metadata path. No test starts automatically.

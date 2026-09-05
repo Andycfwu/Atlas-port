@@ -9,6 +9,7 @@ import multer from 'multer';
 import OpenAI, { toFile } from 'openai';
 
 import { attachLiveTranscriptionWebSocketServer } from './live-transcription-server.mjs';
+import { getLiveRuntimeStatus } from './live-transcription-runtime.mjs';
 
 import {
   logBackendTranscriptionEvent,
@@ -93,7 +94,7 @@ const cleanupUpload = async (uploadedFile, traceId) => {
 };
 
 app.get('/health', (_request, response) => {
-  response.json({ ok: true });
+  response.json({ ok: true, live: getLiveRuntimeStatus() });
 });
 
 app.use('/transcribe', (request, response, next) => {

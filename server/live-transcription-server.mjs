@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 
 import WebSocket, { WebSocketServer } from 'ws';
 
@@ -12,12 +13,14 @@ import {
   normalizeLiveTranscriptionError,
   parseLiveClientControlMessage,
   Pcm16MonoResampler,
+  sanitizeDiagnosticMessage,
 } from './live-transcription-protocol.mjs';
 import { logBackendTranscriptionEvent } from './transcription-observability.mjs';
+import { getLiveRuntimeStatus } from './live-transcription-runtime.mjs';
 
 const LIVE_PATH = '/live-transcribe';
-const OPENAI_REALTIME_URL =
-  'wss://api.openai.com/v1/realtime?model=gpt-live-transcribe';
+export const OPENAI_REALTIME_URL =
+  'wss://api.openai.com/v1/realtime?intent=transcription';
 const MAX_CONNECTIONS = 4;
 const MAX_CLIENT_MESSAGE_BYTES = 256 * 1024;
 const MAX_QUEUED_AUDIO_BYTES = 512 * 1024;
@@ -33,6 +36,12 @@ const safeErrorDetails = (error) => ({
   errorMessage: error.diagnosticMessage ?? error.message,
   errorName: error.diagnosticName ?? error.name,
   stage: error.stage,
+  upstreamCode: error.upstreamCode,
+  upstreamType: error.upstreamType,
+  upstreamParam: error.upstreamParam,
+  upstreamRequestId: error.upstreamRequestId,
+  upstreamEventId: error.upstreamEventId,
+  upstreamStatus: error.upstreamStatus,
 });
 
 const parseJson = (value) => {
@@ -53,6 +62,8 @@ const writeUpgradeError = (socket, statusCode, statusText) => {
 export const attachLiveTranscriptionWebSocketServer = ({
   apiKey,
   httpServer,
+  createUpstreamSocket = (url, options) => new WebSocket(url, options),
+  logEvent = logBackendTranscriptionEvent,
 }) => {
   const webSocketServer = new WebSocketServer({
     maxPayload: MAX_CLIENT_MESSAGE_BYTES,
@@ -102,6 +113,12 @@ export const attachLiveTranscriptionWebSocketServer = ({
     let sessionMetadata = null;
     let traceId = `atlas-live-server-${randomUUID()}`;
     let upstreamSocket = null;
+    let handshakeStatus = null;
+    let upstreamRequestId = null;
+    let uncommittedBytes = 0;
+    let commitsAwaitingAcknowledgement = 0;
+    const pendingItems = new Set();
+    let finishDrained = false;
 
     const addTimeout = (callback, delay) => {
       const timer = setTimeout(() => {
@@ -130,10 +147,13 @@ export const attachLiveTranscriptionWebSocketServer = ({
       if (!traceId) {
         return;
       }
-      logBackendTranscriptionEvent(level, event, traceId, {
-        ...details,
-        pipeline: 'live',
-      });
+      const safeDetails = Object.fromEntries(Object.entries(details).map(([key, value]) => [
+        key,
+        typeof value === 'string'
+          ? sanitizeDiagnosticMessage(apiKey ? value.split(apiKey).join('[REDACTED_API_KEY]') : value)
+          : value,
+      ]));
+      logEvent(level, event, traceId, { ...safeDetails, pipeline: 'live' });
     };
 
     const cleanup = ({ closeClient = true, reason }) => {
@@ -165,6 +185,8 @@ export const attachLiveTranscriptionWebSocketServer = ({
       const error = normalizeLiveTranscriptionError(sourceError);
       log('error', 'LIVE_STREAM_FAILURE', {
         ...safeErrorDetails(error),
+        handshakeStatus,
+        upstreamRequestId: error.upstreamRequestId ?? upstreamRequestId,
         actualSampleRate: sessionMetadata?.actualSampleRate ?? null,
         audioBytesForwarded,
         queuedAudioBytes: audioQueueBytes,
@@ -197,7 +219,7 @@ export const attachLiveTranscriptionWebSocketServer = ({
     };
 
     const finishStream = () => {
-      if (cleanedUp) {
+      if (cleanedUp || !finishDrained || commitsAwaitingAcknowledgement || pendingItems.size) {
         return;
       }
 
@@ -208,6 +230,19 @@ export const attachLiveTranscriptionWebSocketServer = ({
         requestDurationMs: Date.now() - startedAt,
       });
       cleanup({ reason: 'stream_completed' });
+    };
+
+    const commitTurn = () => {
+      if (!uncommittedBytes) return;
+      // Realtime requires at least 100 ms per commit. Pad only a short network
+      // tail; the authoritative local M4A is never altered.
+      const minimumBytes = LIVE_TRANSCRIPTION_TARGET_SAMPLE_RATE * 2 / 10;
+      if (uncommittedBytes < minimumBytes) {
+        upstreamSocket.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: Buffer.alloc(minimumBytes - uncommittedBytes).toString('base64') }));
+      }
+      commitsAwaitingAcknowledgement += 1;
+      upstreamSocket.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+      uncommittedBytes = 0;
     };
 
     const scheduleFlush = (delay = 0) => {
@@ -239,6 +274,19 @@ export const attachLiveTranscriptionWebSocketServer = ({
       const sourceBuffer = audioQueue.shift();
 
       if (!sourceBuffer) {
+        if (completeRequested) {
+          if (audioBytesForwarded === 0) {
+            fail(new LiveTranscriptionServerError({
+              code: 'LIVE_NO_AUDIO_RECEIVED',
+              message: 'No microphone audio reached live transcription. Use Transcribe after saving.',
+              stage: 'audio_streaming',
+            }));
+            return;
+          }
+          commitTurn();
+          finishDrained = true;
+          finishStream();
+        }
         return;
       }
 
@@ -260,6 +308,8 @@ export const attachLiveTranscriptionWebSocketServer = ({
           }),
         );
         audioBytesForwarded += output.byteLength;
+        uncommittedBytes += output.byteLength;
+        if (uncommittedBytes >= LIVE_TRANSCRIPTION_TARGET_SAMPLE_RATE * 2 * 5) commitTurn();
 
         if (audioBytesForwarded === output.byteLength) {
           log('info', 'LIVE_AUDIO_STREAMING_STARTED', {
@@ -274,7 +324,7 @@ export const attachLiveTranscriptionWebSocketServer = ({
         }
       }
 
-      if (audioQueue.length > 0) {
+      if (audioQueue.length > 0 || completeRequested) {
         scheduleFlush(0);
       }
     }
@@ -331,7 +381,7 @@ export const attachLiveTranscriptionWebSocketServer = ({
         );
       }, OPENAI_READY_TIMEOUT_MS);
 
-      upstreamSocket = new WebSocket(OPENAI_REALTIME_URL, {
+      upstreamSocket = createUpstreamSocket(OPENAI_REALTIME_URL, {
         headers: {
           Authorization: `Bearer ${apiKey}`,
         },
@@ -340,8 +390,12 @@ export const attachLiveTranscriptionWebSocketServer = ({
       });
 
       upstreamSocket.on('open', () => {
+        if (cleanedUp) return;
+        handshakeStatus = 101;
         log('info', 'LIVE_OPENAI_CONNECTED', {
           model: 'gpt-live-transcribe',
+          intent: 'transcription',
+          handshakeStatus,
         });
         upstreamSocket.send(
           JSON.stringify(createOpenAITranscriptionSessionUpdate()),
@@ -349,11 +403,28 @@ export const attachLiveTranscriptionWebSocketServer = ({
       });
 
       upstreamSocket.on('unexpected-response', (_request, response) => {
-        fail(
-          Object.assign(new Error('OpenAI rejected the WebSocket upgrade.'), {
-            statusCode: response.statusCode,
-          }),
-        );
+        handshakeStatus = response.statusCode;
+        upstreamRequestId = response.headers?.['x-request-id'] ?? null;
+        let body = '';
+        const rejected = () => {
+          const error = parseJson(body)?.error;
+          fail(Object.assign(new Error(typeof error?.message === 'string' ? error.message : 'OpenAI rejected the WebSocket upgrade.'), {
+            code: error?.code, type: error?.type, param: error?.param,
+            statusCode: response.statusCode, requestId: upstreamRequestId,
+          }));
+        };
+        response.on('data', (chunk) => {
+          if (body.length + chunk.length > 16_384) {
+            rejected();
+            response.destroy();
+          } else body += chunk.toString();
+        });
+        response.on('end', rejected);
+        response.on('error', rejected);
+      });
+      upstreamSocket.on('upgrade', (response) => {
+        handshakeStatus = response.statusCode;
+        upstreamRequestId = response.headers?.['x-request-id'] ?? null;
       });
 
       upstreamSocket.on('message', (data, isBinary) => {
@@ -381,6 +452,7 @@ export const attachLiveTranscriptionWebSocketServer = ({
           clearTrackedTimer(openAIReadyTimer);
           openAIReady = true;
           sendClient({
+            backendRevision: getLiveRuntimeStatus().loadedRevision,
             resampling:
               sessionMetadata.actualSampleRate !==
               LIVE_TRANSCRIPTION_TARGET_SAMPLE_RATE,
@@ -392,7 +464,7 @@ export const attachLiveTranscriptionWebSocketServer = ({
           return;
         }
 
-        if (event.type === 'error') {
+        if (event.type === 'error' || event.type === 'conversation.item.input_audio_transcription.failed') {
           const upstreamError = Object.assign(
             new Error(
               typeof event.error?.message === 'string'
@@ -400,6 +472,10 @@ export const attachLiveTranscriptionWebSocketServer = ({
                 : 'The upstream live transcription session failed.',
             ),
             {
+              stage: openAIReady ? 'openai_event_handling' : 'openai_session_configuration',
+              param: event.error?.param,
+              eventId: event.error?.event_id ?? event.event_id,
+              requestId: upstreamRequestId,
               code:
                 typeof event.error?.code === 'string'
                   ? event.error.code
@@ -415,6 +491,13 @@ export const attachLiveTranscriptionWebSocketServer = ({
             },
           );
           fail(upstreamError);
+          return;
+        }
+
+        if (event.type === 'input_audio_buffer.committed') {
+          commitsAwaitingAcknowledgement = Math.max(0, commitsAwaitingAcknowledgement - 1);
+          pendingItems.add(event.item_id);
+          sendClient({ type: 'committed', itemId: event.item_id, previousItemId: event.previous_item_id ?? null, traceId });
           return;
         }
 
@@ -438,14 +521,15 @@ export const attachLiveTranscriptionWebSocketServer = ({
 
         sendClient(clientEvent);
 
-        if (clientEvent.type === 'final' && completeRequested) {
+        if (clientEvent.type === 'final') {
+          pendingItems.delete(clientEvent.itemId);
           finishStream();
         }
       });
 
       upstreamSocket.on('error', (error) => fail(error));
       upstreamSocket.on('close', (code) => {
-        if (!cleanedUp && !completeRequested) {
+        if (!cleanedUp) {
           fail(
             new LiveTranscriptionServerError({
               code: 'LIVE_OPENAI_CONNECTION_CLOSED',
@@ -525,6 +609,7 @@ export const attachLiveTranscriptionWebSocketServer = ({
           sessionMetadata = control;
           resampler = new Pcm16MonoResampler(control.actualSampleRate);
           log('info', 'LIVE_CLIENT_CONNECTED', {
+            backendRevision: getLiveRuntimeStatus().loadedRevision,
             actualSampleRate: control.actualSampleRate,
             channels: control.channels,
             encoding: control.encoding,
@@ -544,10 +629,11 @@ export const attachLiveTranscriptionWebSocketServer = ({
           });
         }
 
+        if (completeRequested) return;
         completeRequested = true;
         clearTrackedTimer(idleTimer);
+        addTimeout(() => fail(new LiveTranscriptionServerError({ code: 'LIVE_FINAL_TRANSCRIPT_TIMEOUT', message: 'The final live transcript did not arrive in time.', stage: 'openai_event_handling' })), 12_000);
         flushAudioQueue();
-        finishStream();
       } catch (error) {
         fail(error);
       }

@@ -91,7 +91,7 @@ export function RecorderIntegrityPanel({
           {results.map((result) => {
             const isSaving = savingSessionId === result.sessionId;
             const canSave =
-              result.isPlayable &&
+              result.passed && result.sourceValidation?.passed &&
               result.libraryRecordingId === null &&
               !isRunning;
 

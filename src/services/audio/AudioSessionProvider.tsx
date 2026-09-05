@@ -19,6 +19,7 @@ type AudioModeKind = 'playback' | 'recording' | 'unknown';
 export interface AudioSessionRequest {
   reason: string;
   sessionId?: string | null;
+  prepareCapture?: () => Promise<void>;
 }
 
 export interface RecorderAudioSessionProbe {
@@ -261,6 +262,9 @@ export function AudioSessionProvider({ children }: PropsWithChildren) {
             return false;
           }
 
+          // Lock the microphone and stop playback before PCM startup. Restore
+          // recording mode afterward: SDK 57 AudioStream.start changes it.
+          await request.prepareCapture?.();
           await configureRecordingAudioMode();
           modeRef.current = 'recording';
           logTransition(transitionId, 'recording', request, 'ready');

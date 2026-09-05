@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Buffer } from 'node:buffer';
 
 import {
   cleanupLiveTranscriptionResources,
@@ -67,7 +68,7 @@ test('creates the current OpenAI 24 kHz transcription session update', () => {
     update.session.audio.input.transcription.model,
     'gpt-live-transcribe',
   );
-  assert.equal(update.session.audio.input.turn_detection.type, 'server_vad');
+  assert.equal(update.session.audio.input.turn_detection, null);
 });
 
 test('resamples 48 kHz mono PCM16 to 24 kHz consistently across chunks', () => {

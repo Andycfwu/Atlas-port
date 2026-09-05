@@ -19,6 +19,7 @@
     "react-native-safe-area-context": "~5.7.0"
   },
   "devDependencies": {
+    "@expo/ngrok": "^4.1.3",
     "@types/react": "~19.2.2",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.1",
@@ -32,7 +33,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "test": "npm --prefix server test"
+    "test": "node --test tests/*.test.cjs server/*.test.mjs"
   },
   "private": true
 }

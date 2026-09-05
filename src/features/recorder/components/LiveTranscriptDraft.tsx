@@ -8,7 +8,8 @@ interface LiveTranscriptDraftProps {
 }
 
 const statusLabels: Record<LiveTranscriptionState['status'], string> = {
-  completed: 'ENDING',
+  completed: 'ENDED',
+  finishing: 'FINISHING',
   connecting: 'CONNECTING',
   failed: 'UNAVAILABLE',
   idle: 'IDLE',
@@ -28,7 +29,9 @@ export function LiveTranscriptDraft({ state }: LiveTranscriptDraftProps) {
       : state.status === 'paused'
         ? 'Live draft paused in the background. The saved recording continues.'
         : state.status === 'failed'
-          ? 'Live transcript unavailable. The saved recording continues.'
+          ? (state.errorMessage ?? 'Live transcript unavailable. Use saved-file transcription after saving.')
+          : state.status === 'completed' || state.status === 'finishing'
+            ? 'Use the saved recording for the final transcript.'
           : 'Listening for speech…';
 
   return (
@@ -59,6 +62,7 @@ export function LiveTranscriptDraft({ state }: LiveTranscriptDraftProps) {
           {body}
         </Text>
       </ScrollView>
+      {state.draft && state.errorMessage ? <Text style={styles.disclaimer}>{state.errorMessage}</Text> : null}
       <Text style={styles.disclaimer}>
         Draft only. The saved M4A transcript remains authoritative.
       </Text>

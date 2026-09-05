@@ -10,7 +10,7 @@ import {
   validateFinalizedRecording,
   waitForStableRecordingFile,
 } from './recorder.integrity';
-import type { RecordingFileValidation } from './recorder.integrity.types';
+import type { RecorderIntegrityResult, RecordingFileValidation } from './recorder.integrity.types';
 import {
   createTranscriptionTraceId,
   getTranscriptionUserMessage,
@@ -51,6 +51,31 @@ export class RecordingDeletionError extends Error {
     this.name = 'RecordingDeletionError';
   }
 }
+
+// Sources live in Documents/ExpoAudio. A separate manifest makes failures
+// discoverable after a restart without admitting incomplete audio to the library.
+export const preserveRecordingRecoveryReport = (result: RecorderIntegrityResult): void => {
+  try {
+    const directory = new Directory(Paths.document, 'atlas-recording-recovery');
+    directory.create({ idempotent: true, intermediates: true });
+    new File(directory, `${result.sessionId}.json`).write(JSON.stringify({
+      ...result,
+      sourceFilename: result.sourceUri ? new File(result.sourceUri).name : null,
+      savedAt: new Date().toISOString(),
+    }, null, 2));
+  } catch (error) {
+    console.warn('[RecorderStorage] Recovery report could not be written; original audio remains untouched.', error instanceof Error ? error.message : String(error));
+  }
+};
+
+export const removePersistedRecordingSource = (uri: string): void => {
+  try {
+    const source = new File(uri);
+    if (source.exists) source.delete();
+  } catch {
+    console.warn('[RecorderStorage] Saved recording is safe; its original source could not be cleaned up.');
+  }
+};
 
 type BackwardCompatibleSavedRecording = Omit<
   SavedRecording,
@@ -348,14 +373,9 @@ export interface PersistVerifiedRecordingResult {
   recording: SavedRecording;
 }
 
-export interface PersistVerifiedRecordingOptions {
-  allowPlayableDiagnostic?: boolean;
-}
-
 export const persistVerifiedRecordingFile = async (
   sessionId: string,
   sourceValidation: RecordingFileValidation,
-  options: PersistVerifiedRecordingOptions = {},
 ): Promise<PersistVerifiedRecordingResult> => {
   const directory = ensureRecordingsDirectory();
   const sourceUri = sourceValidation.uri;
@@ -365,11 +385,8 @@ export const persistVerifiedRecordingFile = async (
     throw new Error('The verified native recording file could not be found.');
   }
 
-  if (
-    !sourceValidation.passed &&
-    !(options.allowPlayableDiagnostic && sourceValidation.isPlayable)
-  ) {
-    throw new Error('An unverified recording cannot be moved into the library.');
+  if (!sourceValidation.passed) {
+    throw new Error('An unverified recording cannot be copied into the library.');
   }
 
   if (sourceValidation.playerDurationMillis === null) {
@@ -384,14 +401,14 @@ export const persistVerifiedRecordingFile = async (
   const destination = new File(directory, `recording-${safeTimestamp}${extension}`);
 
   try {
-    await sourceFile.move(destination);
-    logRecorderIntegrity(sessionId, 'FILE_MOVED', {
+    await sourceFile.copy(destination);
+    logRecorderIntegrity(sessionId, 'FILE_COPIED', {
       destinationUri: destination.uri,
       sourceSize,
       sourceUri,
     });
   } catch (error) {
-    throw new Error('The verified recording could not be moved to the recording library.', {
+    throw new Error('The verified recording could not be copied to the recording library.', {
       cause: error,
     });
   }
@@ -404,7 +421,7 @@ export const persistVerifiedRecordingFile = async (
 
     if (!destination.exists || stableDestination.size !== sourceSize) {
       throw new Error(
-        `The moved recording size changed from ${sourceSize} to ${stableDestination.size} bytes.`,
+        `The copied recording size changed from ${sourceSize} to ${stableDestination.size} bytes.`,
       );
     }
 
@@ -417,7 +434,7 @@ export const persistVerifiedRecordingFile = async (
       destinationValidationBase.playerDurationMillis;
 
     if (destinationDurationMillis === null) {
-      throw new Error('The moved recording could not be loaded for duration validation.');
+      throw new Error('The copied recording could not be loaded for duration validation.');
     }
 
     const durationDifferenceMillis = Math.abs(
@@ -466,8 +483,8 @@ export const persistVerifiedRecordingFile = async (
       ...destinationValidation,
     });
 
-    if (!destinationStoragePassed) {
-      throw new Error('The moved recording duration did not match the verified source.');
+    if (!destinationValidation.passed) {
+      throw new Error('The copied recording failed duration or integrity validation.');
     }
 
     return {
@@ -486,21 +503,9 @@ export const persistVerifiedRecordingFile = async (
       },
     };
   } catch (error) {
-    try {
-      const originalLocation = new File(sourceUri);
-
-      if (destination.exists && !originalLocation.exists) {
-        await destination.move(originalLocation);
-      }
-    } catch (rollbackError) {
-      console.error('[RecorderStorage] Failed to restore the verified source after move validation failed.', {
-        destinationUri: destination.uri,
-        rollbackError,
-        sessionId,
-        sourceUri,
-      });
-    }
-
+    console.warn('[RecorderStorage] Copy validation failed; source and diagnostic copy preserved.', {
+      sourceUri, destinationUri: destination.uri, sessionId,
+    });
     throw error;
   }
 };
