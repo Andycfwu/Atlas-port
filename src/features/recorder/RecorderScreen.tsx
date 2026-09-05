@@ -4,6 +4,7 @@ import { AppHeader } from '../../components/AppHeader';
 import { Screen } from '../../components/Screen';
 import { colors } from '../../config/theme';
 import { MicrophonePermissionCard } from './components/MicrophonePermissionCard';
+import { LiveTranscriptDraft } from './components/LiveTranscriptDraft';
 import { RecordingControls } from './components/RecordingControls';
 import { RecorderIntegrityPanel } from './components/RecorderIntegrityPanel';
 import { SavedRecordings } from './components/SavedRecordings';
@@ -24,6 +25,7 @@ export function RecorderScreen({ onOpenRecording }: RecorderScreenProps) {
     integrityTestRunning,
     isLoadingRecordings,
     isRecording,
+    liveTranscription,
     metering,
     openSettings,
     permissionState,
@@ -66,6 +68,10 @@ export function RecorderScreen({ onOpenRecording }: RecorderScreenProps) {
           onToggle={isRecording ? stopRecording : startRecording}
           phase={phase}
         />
+
+        {isRecording || phase === 'stopping' ? (
+          <LiveTranscriptDraft state={liveTranscription} />
+        ) : null}
 
         {integrityModeEnabled ? (
           <RecorderIntegrityPanel

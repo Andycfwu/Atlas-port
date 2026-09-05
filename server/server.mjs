@@ -1,4 +1,5 @@
 import { createReadStream } from 'node:fs';
+import { createServer } from 'node:http';
 import { unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,6 +7,8 @@ import path from 'node:path';
 import express from 'express';
 import multer from 'multer';
 import OpenAI, { toFile } from 'openai';
+
+import { attachLiveTranscriptionWebSocketServer } from './live-transcription-server.mjs';
 
 import {
   logBackendTranscriptionEvent,
@@ -42,6 +45,8 @@ const openai = new OpenAI({
   timeout: OPENAI_REQUEST_TIMEOUT_MS,
 });
 const app = express();
+const httpServer = createServer(app);
+attachLiveTranscriptionWebSocketServer({ apiKey, httpServer });
 
 const getTraceContext = (request) => {
   if (!request.atlasTranscriptionTrace) {
@@ -269,7 +274,7 @@ app.use(async (error, request, response, next) => {
     .json(toSafeErrorResponse(normalizedError, trace.traceId));
 });
 
-app.listen(port, '0.0.0.0', (error) => {
+httpServer.listen(port, '0.0.0.0', (error) => {
   if (error) {
     console.error('[TranscriptionServer] Could not start.', {
       error: error instanceof Error ? error.message : String(error),

@@ -8,3 +8,7 @@ export type {
   SavedRecording,
   TranscriptionStatus,
 } from './recorder.types';
+export type {
+  LiveTranscriptionState,
+  LiveTranscriptionStatus,
+} from './live';

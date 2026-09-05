@@ -37,6 +37,8 @@ import type {
   RecorderIntegrityTestKind,
   RecordingFileValidation,
 } from './recorder.integrity.types';
+import { useLiveTranscription } from './live';
+import type { LiveTranscriptionState } from './live';
 import {
   createTranscriptionTraceId,
   getBackendHost,
@@ -71,6 +73,7 @@ interface RecorderContextValue {
   integrityTestRunning: Exclude<RecorderIntegrityTestKind, 'normal'> | null;
   isLoadingRecordings: boolean;
   isRecording: boolean;
+  liveTranscription: LiveTranscriptionState;
   metering: number | null;
   openSettings: () => Promise<void>;
   permissionState: MicrophonePermissionState;
@@ -248,6 +251,11 @@ export function RecorderProvider({ children }: PropsWithChildren) {
 
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder, 200);
+  const {
+    startLiveTranscription,
+    state: liveTranscription,
+    stopLiveTranscription,
+  } = useLiveTranscription();
 
   useEffect(() => {
     recorderStateRef.current = recorderState;
@@ -348,6 +356,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       !operationInProgressRef.current &&
       (!recorder.isRecording || !recorderState.isRecording)
     ) {
+      stopLiveTranscription('authoritative_recorder_stopped', 'failed');
       markSessionFailed(
         session,
         new Error('The native recorder stopped before the explicit Stop operation.'),
@@ -361,6 +370,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
     }
 
     if (recorderState.mediaServicesDidReset && session && !session.failed) {
+      stopLiveTranscription('media_services_reset', 'failed');
       markSessionFailed(
         session,
         new Error('iOS media services reset during recording.'),
@@ -368,7 +378,13 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         { observedStatus: recorderState },
       );
     }
-  }, [markSessionFailed, recorder, recorderState, restoreSoundPlayback]);
+  }, [
+    markSessionFailed,
+    recorder,
+    recorderState,
+    restoreSoundPlayback,
+    stopLiveTranscription,
+  ]);
 
   const refreshPermission = useCallback(async () => {
     try {
@@ -582,6 +598,11 @@ export function RecorderProvider({ children }: PropsWithChildren) {
           recorderStatus: confirmation.status,
           sourceUri: confirmation.sourceUri,
         });
+
+        if (testKind === 'normal') {
+          void startLiveTranscription({ recorderSessionId: session.sessionId });
+        }
+
         return session;
       } catch (error) {
         markSessionFailed(session, error, START_ERROR);
@@ -613,6 +634,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       prepareMicrophoneRecording,
       recorder,
       restoreSoundPlayback,
+      startLiveTranscription,
       stopNativeRecorderOnce,
     ],
   );
@@ -857,6 +879,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
     operationInProgressRef.current = true;
     setOperationPhase('stopping');
     setErrorMessage(null);
+    stopLiveTranscription('recording_stop_requested');
     logRecorderIntegrity(session.sessionId, 'STOP_REQUESTED', {
       nativeIsRecording: recorder.isRecording,
       recorderId: recorder.id,
@@ -1100,6 +1123,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
     recorder,
     restoreSoundPlayback,
     stopNativeRecorderOnce,
+    stopLiveTranscription,
     transcribeSavedRecording,
   ]);
 
@@ -1333,6 +1357,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       integrityTestRunning,
       isLoadingRecordings,
       isRecording: nativeRecordingConfirmed,
+      liveTranscription,
       metering: nativeRecordingConfirmed ? (recorderState.metering ?? null) : null,
       openSettings: Linking.openSettings,
       permissionState,
@@ -1353,6 +1378,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       integrityResults,
       integrityTestRunning,
       isLoadingRecordings,
+      liveTranscription,
       nativeRecordingConfirmed,
       permissionState,
       phase,

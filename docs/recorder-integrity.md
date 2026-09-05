@@ -20,8 +20,10 @@ flowchart TD
   J --> K[Restore playback mode only after native recorder is inactive]
   I -- Yes --> L[Store native confirmation time]
   L --> M[Start provider recording state, timer, metering, and background UI]
-  M --> N[Stop button]
-  N --> O[Acquire the same operation mutex]
+  M --> M2[Start optional foreground PCM live draft stream]
+  M2 --> N[Stop button]
+  N --> N2[Stop PCM stream and close live WebSocket]
+  N2 --> O[Acquire the same operation mutex]
   O --> P[Capture recorder ID, URI, status URL, duration, reset state]
   P --> Q[Call centralized native stop exactly once]
   Q --> R[Capture post-stop URI and status]
@@ -66,8 +68,11 @@ flowchart TD
   passed when the recorder was constructed first.
 - The only normal source-file move is in persistVerifiedRecordingFile, after
   source existence, stable size, playable load, and duration validation.
-- There is no second microphone path: no useAudioStream, second
-  useAudioRecorder, expo-av recorder, or third-party recorder library.
+- The optional foreground live-draft path uses one `useAudioStream` capture in
+  RecorderProvider. It starts only after the authoritative recorder receives
+  native confirmation, stops before the authoritative Stop operation, and does
+  not own the audio session or M4A lifecycle. There is still no second
+  `useAudioRecorder`, expo-av recorder, or third-party recorder library.
 - There is no mounted video component or expo-video / react-native-video
   dependency.
 

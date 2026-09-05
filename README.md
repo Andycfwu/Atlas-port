@@ -10,8 +10,9 @@ client. The app currently provides two destinations:
 
 The implementation uses Expo SDK 57, strict TypeScript, `expo-audio`, and the
 modern `expo-file-system` API. It contains no authentication, database, cloud
-synchronization, realtime transcription, or client-side AI credentials. An
-isolated development Node server supports optional post-stop transcription.
+synchronization, or client-side AI credentials. An isolated development Node
+server supports optional provisional live transcription and authoritative
+post-stop transcription.
 
 ## Requirements
 
@@ -169,6 +170,28 @@ the `gpt-transcribe` model. It is deliberately small and unauthenticated, so use
 it only for local development or replace it with an authenticated RealTorch API
 before production use.
 
+### Foreground live-transcription spike
+
+After the authoritative M4A recorder reports a native recording confirmation,
+the application starts a second Expo Audio `useAudioStream` capture requesting
+mono, int16 PCM at 24 kHz. PCM is sent incrementally to the backend at
+`WS /live-transcribe`; it is never retained as a complete recording in
+JavaScript and is never written into recording metadata.
+
+Expo reports the actual hardware sample rate after the stream starts. The client
+sends both requested and actual rates in its start message. The backend validates
+the format and explicitly resamples mono PCM16 to 24 kHz when necessary before
+connecting to an OpenAI `gpt-live-transcribe` transcription session. Both client
+and backend enforce bounded 512 KB audio queues and message/connection limits.
+
+The Recorder screen labels this text **Live draft**. It is provisional and is
+not saved as the recording transcript. Stop & Save first ends the PCM stream,
+then follows the existing M4A stop, integrity validation, persistence, and
+`POST /transcribe` flow. The final `gpt-transcribe` result remains authoritative.
+If the WebSocket, network, or upstream session fails, only the live draft stops;
+the M4A recorder continues. Backgrounding or locking pauses the live spike and
+does not change the background recorder or global audio-session coordinator.
+
 ### Audio-session coordination
 
 `AudioSessionProvider` serializes transitions between the app's three audio
@@ -227,6 +250,17 @@ Keep the phone and Mac on the same network, confirm
 ```bash
 npm start
 ```
+
+The same `EXPO_PUBLIC_API_URL` is converted from `http(s)` to `ws(s)` for the
+development live-transcription endpoint. No OpenAI credential or ephemeral token
+is sent to the phone.
+
+For foreground acceptance, record once for 30 seconds and once for 60 seconds.
+Confirm the Live draft changes while speaking, Stop & Save still produces a
+healthy M4A, and Recording Detail ultimately shows the post-stop transcript.
+Then repeat while disabling Wi-Fi and while backgrounding/locking: the live draft
+may become unavailable or paused, but Stop & Save, playback, restart persistence,
+and Retry Transcription must continue to work.
 
 Adding `expo-clipboard` changes the native dependency set. Create one fresh iOS
 development build before physical-device acceptance; ordinary TypeScript edits
@@ -306,6 +340,7 @@ src/services/api/            Swappable RealTorch API client abstraction
 src/services/audio/          Shared serialized native audio-session coordination
 assets/atlas/                Local Atlas image and sound assets
 server/                      Development-only OpenAI transcription adapter
+server/live-transcription-*  Bounded WebSocket proxy, PCM resampling, and tests
 ```
 
 ## Checks
