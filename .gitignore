@@ -41,3 +41,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Single-user Meeting Memory database (contains transcripts and embeddings)
+/server/data/

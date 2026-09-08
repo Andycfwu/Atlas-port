@@ -11,6 +11,7 @@
     "expo-audio": "~57.0.4",
     "expo-clipboard": "~57.0.1",
     "expo-dev-client": "~57.0.15",
+    "expo-document-picker": "~57.0.1",
     "expo-file-system": "~57.0.5",
     "expo-sharing": "~57.0.15",
     "expo-status-bar": "~57.0.1",
@@ -26,6 +27,8 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "memory:verify:messy": "node --env-file=server/.env server/verify-meeting-memory-messy.mjs",
+    "memory:verify": "node --env-file=server/.env server/verify-meeting-memory.mjs",
     "backend": "npm --prefix server run dev",
     "start": "expo start",
     "android": "expo run:android",

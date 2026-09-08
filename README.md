@@ -1,11 +1,11 @@
 # RealTorch Atlas Mobile
 
 An interactive Atlas mobile shell, adapted from the desktop reference, with
-local conversations and the existing voice recorder / live transcription screen.
+local conversations, Meeting Memory, and the existing voice recorder / live transcription screen.
 
 - **Atlas** — welcome screen, Find It / Plan It / Sell It suggestions, and a
   keyboard-aware text composer. Suggestions populate the composer without sending.
-- **Menu** — New Chat, Search Chats, Chat History, File Browser, Live
+- **Menu** — New Chat, Search Chats, Chat History, Meeting Memory, File Browser, Live
   Transcription, and Profile/Settings. File Browser and Profile/Settings are
   clearly marked **Coming soon**.
 - **Local chats** — create, send, reopen, and search conversation titles and
@@ -13,40 +13,58 @@ local conversations and the existing voice recorder / live transcription screen.
   **“Atlas isn’t connected yet.”** No generated replies or Atlas API calls.
 - **Live Transcription** — the existing recorder, live draft, saved recordings,
   playback, sharing, and post-stop transcription remain on a separate screen.
+- **Meeting Memory** — paste/import completed transcripts, organize topics and
+  supported decisions/actions, ask within or across meetings, and open cited
+  original passages. Real AI processing runs on the existing Mac backend.
 
 The implementation uses the existing Expo SDK 57 setup, strict TypeScript,
 `expo-audio`, and modern `expo-file-system`. Chat authentication, cloud sync,
-attachments, and Atlas backend integration are outside this milestone. The
+attachments, and the general chat backend integration remain outside this milestone. The
 separate development Node server continues to support the existing optional
 live and saved-recording transcription; the chat shell does not call it.
 
-See [the shell handoff and verification notes](docs/atlas-shell.md).
+See [Meeting Memory setup, models, storage and integration](docs/meeting-memory.md),
+[phone-style transcript verification and speaker/audio provenance](docs/meeting-memory-provenance.md),
+[Meeting Memory verification](docs/meeting-memory-verification.md), and
+[the shell handoff and verification notes](docs/atlas-shell.md).
 
 ## Requirements
 
-- Node.js 22.13 or newer
+- Node.js 24 recommended (24.14.1 tested for Meeting Memory's built-in SQLite)
 - npm
-- Xcode with an iOS Simulator, or Android Studio with an Android emulator
-- A development or production build for background-recording tests
+- Expo Go supporting SDK 57 on a physical iPhone (the current milestone target)
+- No Xcode, simulator or custom build is needed for Meeting Memory or foreground recording. Background-recording tests require a separate native build and are outside this milestone.
 
-## Install and run
+## Install and run (physical iPhone / Expo Go)
 
-```bash
-npm install
-npm start
+From `/Users/andywu/Desktop/Codex/atlas-port`, install dependencies if needed with
+`npm install` and `npm --prefix server install`. Keep `OPENAI_API_KEY` only in
+`server/.env` (use `server/.env.example` for the required names; never put the key
+in a public Expo variable).
+
+Terminal 1:
+
+```sh
+cd /Users/andywu/Desktop/Codex/atlas-port
+npm run backend
 ```
 
-Start a platform directly:
+Terminal 2:
 
-```bash
-npm run ios
-npm run android
+```sh
+cd /Users/andywu/Desktop/Codex/atlas-port
+EXPO_PUBLIC_API_URL="http://$(ipconfig getifaddr en0):8787" npx expo start --go --lan --port 8081
 ```
 
-The `expo-audio` config plugin changes native permissions and background modes.
-After changing the plugin configuration, create a fresh native development build;
-Expo Go does not contain project-specific native configuration and is not a valid
-background-recording test environment.
+Both servers were already running at handoff; reuse them, or stop the corresponding
+terminal with Ctrl+C before starting a replacement. Scan Metro's QR code in Expo Go.
+Use the same Wi-Fi and allow Local Network access. The backend binds to `0.0.0.0`;
+from iPhone Safari check `http://<Mac Wi-Fi IP>:8787/health` (`10.0.0.104` at handoff).
+Metro connectivity alone does not prove the backend is reachable. Keep Atlas in
+the foreground: project-specific background recording is unsupported in Expo Go,
+and live transcription intentionally pauses when switching apps/locking.
+
+See [saved live/post transcripts, investigation, and the short phone test](docs/saved-transcript-integrity.md).
 
 ## Brand assets
 
@@ -284,6 +302,17 @@ Keep the phone and Mac on the same network, confirm
 ```bash
 npm start
 ```
+
+After changing networks or computers, update the LAN URL and reload Expo; a
+working Metro connection does not establish transcription backend connectivity.
+For foreground testing in Expo Go on this Mac, use the current Wi-Fi address:
+
+```bash
+EXPO_PUBLIC_API_URL="http://$(ipconfig getifaddr en0):8787" npx expo start --go --lan --clear
+```
+
+See the [Mac/iPhone repair and device verification notes](docs/mac-live-transcription.md)
+for the diagnosed endpoint failure, device results, and native build setup.
 
 The same `EXPO_PUBLIC_API_URL` is converted from `http(s)` to `ws(s)` for the
 development live-transcription endpoint. No OpenAI credential or ephemeral token

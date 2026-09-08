@@ -12,6 +12,8 @@ import {
 import { AppHeader } from '../../components/AppHeader';
 import { Screen } from '../../components/Screen';
 import { colors } from '../../config/theme';
+import type { SavedRecording } from './recorder.types';
+import { preferredTranscript } from './recorder.transcripts';
 import { RecordingScrubber } from './components/RecordingScrubber';
 import { RecordingTranscript } from './components/RecordingTranscript';
 import { RenameRecordingModal } from './components/RenameRecordingModal';
@@ -26,12 +28,14 @@ import { useRecordingPlayer } from './playback';
 interface RecordingDetailScreenProps {
   onBack: () => void;
   onDeleted: () => void;
+  onMeetingMemory: (recording: SavedRecording) => void;
   recordingId: string;
 }
 
 export function RecordingDetailScreen({
   onBack,
   onDeleted,
+  onMeetingMemory,
   recordingId,
 }: RecordingDetailScreenProps) {
   const {
@@ -284,6 +288,10 @@ export function RecordingDetailScreen({
         <View style={styles.actionSection}>
           <Text style={styles.sectionEyebrow}>RECORDING ACTIONS</Text>
           <View style={styles.actionList}>
+            <DetailAction label="Add to Meeting Memory" meta={preferredTranscript(recording)?.source === 'live' ? 'USE SAVED LIVE TEXT' : 'USE SAVED-AUDIO TRANSCRIPT'} onPress={() => {
+              if (preferredTranscript(recording)) { void pause(); onMeetingMemory(recording); }
+              else setActionError('No transcript is available yet. Use Transcribe Recording below, then add it to Meeting Memory.');
+            }} />
             <DetailAction
               label="Rename"
               meta="EDIT DISPLAY TITLE"
@@ -308,7 +316,7 @@ export function RecordingDetailScreen({
         </View>
 
         <RecordingTranscript
-          onTranscribe={() => transcribeRecording(recording.id)}
+          onTranscribe={force => transcribeRecording(recording.id, force)}
           recording={recording}
         />
       </ScrollView>

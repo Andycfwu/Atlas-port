@@ -55,16 +55,19 @@ import {
   loadRecordings,
   persistVerifiedRecordingFile,
   preserveRecordingRecoveryReport,
+  preserveLiveTranscript,
   removePersistedRecordingSource,
   renameRecording as renameStoredRecording,
   saveRecordingMetadata,
   updateRecordingTranscription,
 } from './recorder.storage';
+import { savedLiveSource } from './recorder.transcripts';
 import { transcribeRecordingFile } from './recording-transcription.service';
 import type {
   MicrophonePermissionState,
   RecorderPhase,
   SavedRecording,
+  SavedLiveTranscript,
 } from './recorder.types';
 
 interface RecorderContextValue {
@@ -90,7 +93,7 @@ interface RecorderContextValue {
   saveIntegrityResultToLibrary: (sessionId: string) => Promise<void>;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
-  transcribeRecording: (recordingId: string) => Promise<boolean>;
+  transcribeRecording: (recordingId: string, force?: boolean) => Promise<boolean>;
 }
 
 type OperationPhase = Exclude<RecorderPhase, 'recording'>;
@@ -258,6 +261,8 @@ export function RecorderProvider({ children }: PropsWithChildren) {
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder, 200);
   const {
+    finishLiveTranscription,
+    getLiveSnapshot,
     resetLiveTranscription,
     sendLiveAudio,
     startLiveTranscription,
@@ -671,7 +676,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
   }, []);
 
   const transcribeSavedRecording = useCallback(
-    async (recording: SavedRecording): Promise<boolean> => {
+    async (recording: SavedRecording, force = false): Promise<boolean> => {
       if (
         transcriptionInFlightRef.current.has(recording.id) ||
         recording.transcriptionStatus === 'transcribing'
@@ -679,7 +684,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         return false;
       }
 
-      if (recording.transcriptionStatus === 'complete') {
+      if (recording.transcriptionStatus === 'complete' && !force) {
         return true;
       }
 
@@ -818,14 +823,13 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         }
 
         if (!transcribingStatusPersisted || terminalError !== transcriptionError) {
-          replaceRecording({
-            ...recording,
+          setRecordings(current => current.map(item => item.id === recording.id ? {
+            ...item,
             latestTranscriptionFailure:
               toTranscriptionFailureDetails(terminalError),
-            transcript: null,
             transcriptionStatus: 'failed',
             transcriptionTraceId: traceId,
-          });
+          } : item));
         }
 
         logTranscriptionEvent('error', 'REQUEST_FAILED', traceId, {
@@ -856,12 +860,14 @@ export function RecorderProvider({ children }: PropsWithChildren) {
     async (
       sessionId: string,
       sourceValidation: RecordingFileValidation,
+      liveTranscript: SavedLiveTranscript | null = null,
     ) => {
       const persisted = await persistVerifiedRecordingFile(
         sessionId,
         sourceValidation,
       );
 
+      persisted.recording = { ...persisted.recording, liveTranscript };
       try {
         await saveRecordingMetadata(persisted.recording);
       } catch (error) {
@@ -901,7 +907,6 @@ export function RecorderProvider({ children }: PropsWithChildren) {
     operationInProgressRef.current = true;
     setOperationPhase('stopping');
     setErrorMessage(null);
-    stopLiveTranscription('recording_stop_requested');
     logRecorderIntegrity(session.sessionId, 'STOP_REQUESTED', {
       nativeIsRecording: recorder.isRecording,
       recorderId: recorder.id,
@@ -942,6 +947,9 @@ export function RecorderProvider({ children }: PropsWithChildren) {
     try {
       await stopNativeRecorderOnce(session);
       releasePcmCapture();
+      // Keep accepting PCM until the authoritative native recorder has stopped.
+      // Snapshot refs, not the batched UI state; final events can arrive during Stop.
+      const liveFinalization = finishLiveTranscription();
       logRecorderIntegrity(session.sessionId, 'STOP_FINISHED', {
         nativeIsRecording: recorder.isRecording,
         recorderId: recorder.id,
@@ -963,6 +971,13 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         statusUrlChanged: statusUrlAfterStop !== statusUrlBeforeStop,
       });
 
+      const liveTranscript = session.testKind === 'normal'
+        ? savedLiveSource(await liveFinalization, session.sessionId) : null;
+      if (liveTranscript) {
+        // Independent recovery copy survives a subsequent audio/library save failure.
+        try { preserveLiveTranscript(session.sessionId, liveTranscript); }
+        catch { console.warn('[RecorderStorage] Live recovery copy could not be written; attempting library save.'); }
+      }
       const candidateUris = Array.from(
         new Set(
           [
@@ -1056,6 +1071,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         const persisted = await persistRecordingToLibrary(
           session.sessionId,
           sourceValidation,
+          liveTranscript,
         );
         const persistenceChecks: RecorderIntegrityCheck[] = [
           ...persisted.destinationValidation.checks.filter(
@@ -1107,6 +1123,12 @@ export function RecorderProvider({ children }: PropsWithChildren) {
 
       return result;
     } catch (error) {
+      stopLiveTranscription('recording_save_failed', 'failed');
+      const retained = savedLiveSource(getLiveSnapshot(), session.sessionId);
+      if (retained) {
+        try { preserveLiveTranscript(session.sessionId, retained); }
+        catch { console.warn('[RecorderStorage] Live recovery copy could not be written.'); }
+      }
       const operationCheck = createOperationFailureCheck(error);
       const checks = [...result.checks, operationCheck];
       result = {
@@ -1143,6 +1165,8 @@ export function RecorderProvider({ children }: PropsWithChildren) {
     }
   }, [
     appendIntegrityResult,
+    finishLiveTranscription,
+    getLiveSnapshot,
     markSessionFailed,
     persistRecordingToLibrary,
     releasePcmCapture,
@@ -1305,14 +1329,14 @@ export function RecorderProvider({ children }: PropsWithChildren) {
   );
 
   const transcribeRecording = useCallback(
-    async (recordingId: string): Promise<boolean> => {
+    async (recordingId: string, force = false): Promise<boolean> => {
       const recording = recordings.find((item) => item.id === recordingId);
 
       if (!recording) {
         throw new Error('The recording could not be found for transcription.');
       }
 
-      return transcribeSavedRecording(recording);
+      return transcribeSavedRecording(recording, force);
     },
     [recordings, transcribeSavedRecording],
   );

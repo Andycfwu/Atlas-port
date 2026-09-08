@@ -8,10 +8,11 @@ import { useChats } from '../features/chat/ChatProvider';
 import { searchConversations } from '../features/chat/chat.model';
 import { chatColors as c } from '../features/chat/chat.theme';
 
-export type AppDestination = 'atlas' | 'search' | 'history' | 'files' | 'recorder' | 'settings';
+export type AppDestination = 'atlas' | 'search' | 'history' | 'files' | 'recorder' | 'settings' | 'memory';
 const destinations: { id: AppDestination; label: string; icon: IconName; soon?: boolean }[] = [
   { id: 'search', label: 'Search Chats', icon: 'search' },
   { id: 'history', label: 'Chat History', icon: 'chat' },
+  { id: 'memory', label: 'Meeting Memory', icon: 'folder' },
   { id: 'files', label: 'File Browser', icon: 'folder', soon: true },
   { id: 'recorder', label: 'Live Transcription', icon: 'mic' },
   { id: 'settings', label: 'Profile/Settings', icon: 'profile', soon: true },

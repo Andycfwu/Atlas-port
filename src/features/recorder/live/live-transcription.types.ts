@@ -1,3 +1,4 @@
+import type { LiveTranscriptSegment } from '../recorder.types';
 export type LiveTranscriptionStatus =
   | 'idle'
   | 'connecting'
@@ -13,6 +14,7 @@ export interface LiveTranscriptionState {
   errorMessage: string | null;
   status: LiveTranscriptionStatus;
   traceId: string | null;
+  segments?: LiveTranscriptSegment[];
 }
 
 export interface LiveTranscriptionStartOptions {

@@ -241,6 +241,7 @@ export const transcribeRecordingFile = async (
       headers: {
         Accept: 'text/plain',
         'X-Atlas-Trace-Id': traceId,
+        'X-Atlas-Audio-Bytes': String(fileMetadata.byteSize),
       },
       body: formData,
       bodyEncoding: 'form-data',
@@ -291,9 +292,9 @@ export const transcribeRecordingFile = async (
     );
   }
 
-  const transcript = response.trim();
+  const transcript = response;
 
-  if (!transcript) {
+  if (!transcript.trim()) {
     throw createError(
       'EMPTY_TRANSCRIPT',
       'transcript_validated',

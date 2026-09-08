@@ -10,10 +10,11 @@ import {
 } from 'react-native';
 
 import { colors } from '../../../config/theme';
+import { postSources } from '../recorder.transcripts';
 import type { SavedRecording } from '../recorder.types';
 
 interface RecordingTranscriptProps {
-  onTranscribe: () => Promise<boolean>;
+  onTranscribe: (force?: boolean) => Promise<boolean>;
   recording: SavedRecording;
 }
 
@@ -34,7 +35,7 @@ export function RecordingTranscript({
     setMessage(null);
 
     try {
-      await onTranscribe();
+      await onTranscribe(true);
     } finally {
       setIsRequesting(false);
     }
@@ -74,11 +75,21 @@ export function RecordingTranscript({
         : 'READY';
 
   return (
-    <View style={styles.card}>
+    <><View style={styles.card}>
+      <Text style={styles.eyebrow}>SAVED LIVE TRANSCRIPT</Text>
+      <Text style={styles.emptyBody}>{recording.liveTranscript
+        ? `Captured during recording · ${recording.liveTranscript.model} · ${recording.liveTranscript.status}`
+        : 'No live transcript was saved for this recording. Older recordings cannot recover live text that was never stored; transcribe the saved audio instead.'}</Text>
+      {recording.liveTranscript?.status !== 'completed' && recording.liveTranscript ? <Text style={styles.emptyBody}>Live capture was incomplete. Text received before it stopped is preserved. {recording.liveTranscript.errorMessage}</Text> : null}
+      {recording.liveTranscript?.text ? <><ScrollView nestedScrollEnabled style={styles.transcriptScroll}><Text selectable style={styles.transcriptText}>{recording.liveTranscript.text}</Text></ScrollView>
+        <TranscriptAction label="Copy live transcript" onPress={async () => { try { await Clipboard.setStringAsync(recording.liveTranscript!.text); setMessage('Transcript copied.'); } catch { setMessage('The transcript could not be copied.'); } }} />
+      </> : null}
+      <Text style={styles.emptyBody}>Live and saved-audio transcription are independent source versions. They may differ; Atlas keeps them separate and does not guess a merged transcript. Meeting Memory defaults to saved live text when available.</Text>
+    </View><View style={styles.card}>
       <View style={styles.headingRow}>
         <View>
-          <Text style={styles.eyebrow}>ATLAS TRANSCRIPT</Text>
-          <Text style={styles.title}>Transcript</Text>
+          <Text style={styles.eyebrow}>SAVED-AUDIO TRANSCRIPT</Text>
+          <Text style={styles.title}>Post-recording text</Text>
         </View>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{statusBadge}</Text>
@@ -171,6 +182,12 @@ export function RecordingTranscript({
         </View>
       )}
 
+      {recording.transcript && !hasTranscript ? <View style={styles.completeState}><Text style={styles.emptyBody}>Previous saved-audio result (preserved)</Text><Text selectable style={styles.transcriptText}>{recording.transcript}</Text></View> : null}
+      {recording.transcriptionStatus === 'complete' && !isTranscribing ? <TranscriptAction label="Transcribe audio again (keeps previous)" onPress={requestTranscription} /> : null}
+      {postSources(recording).map((version, index, all) => <View key={`${version.traceId}-${index}`}>
+        <Text style={styles.emptyBody}>{index === all.length - 1 ? 'Latest' : 'Earlier'} saved-audio version · {version.model ?? 'Model not recorded'} · {version.savedAt ?? 'Date not recorded'}</Text>
+        {index < all.length - 1 ? <ScrollView nestedScrollEnabled style={styles.transcriptScroll}><Text selectable style={styles.transcriptText}>{version.text}</Text></ScrollView> : null}
+      </View>)}
       {message ? (
         <Text
           style={
@@ -182,7 +199,7 @@ export function RecordingTranscript({
           {message}
         </Text>
       ) : null}
-    </View>
+    </View></>
   );
 }
 

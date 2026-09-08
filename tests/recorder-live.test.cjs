@@ -4,6 +4,7 @@ const test = require('node:test');
 const { load, hooks } = require('./load-typescript.cjs');
 
 const { RecorderPcmCapture, prepareRecordingCapture } = load('src/features/recorder/recorder.capture.ts');
+const liveErrors = load('src/features/recorder/live/live-transcription.errors.ts');
 const setup = (globals = {}) => {
   const harness = hooks();
   const connections = [];
@@ -14,6 +15,7 @@ const setup = (globals = {}) => {
     react: harness.react,
     'react-native': { AppState: { addEventListener: (_event, callback) => { background = callback; return { remove() {} }; } } },
     '../../../config/app.config': { appConfig: { apiUrl: 'http://atlas.test' } },
+    './live-transcription.errors': liveErrors,
     '../recording-transcription.errors': {
       createTranscriptionTraceId: () => `trace-${++nextTrace}`,
       getBackendHost: () => 'atlas.test',
@@ -99,6 +101,40 @@ test('failure followed immediately by Stop and stale ready cannot become complet
   connections[0].callbacks.onCompleted();
   assert.equal(harness.state().status, 'failed');
   assert.equal(logs.some((log) => log[1] === 'LIVE_STREAM_COMPLETED'), false);
+  harness.unmount();
+});
+
+test('stale backend address timeout shows actionable guidance and stays failed after Stop', async () => {
+  const { live, connections, harness } = setup();
+  await live.startLiveTranscription({ recorderSessionId: 'stale-ip', actualSampleRate: 24000 });
+  live.sendLiveAudio({ data: new ArrayBuffer(4800), sampleRate: 24000, channels: 1 });
+  connections[0].callbacks.onFailure({ code: 'LIVE_CONNECTION_TIMEOUT', message: 'ready timeout' });
+  const failure = harness.state().errorMessage;
+  assert.match(failure, /timed out at atlas.test/);
+  assert.match(failure, /Wi-Fi address is current/);
+  assert.match(failure, /Metro connecting does not confirm/);
+  live.stopLiveTranscription('stop');
+  connections[0].callbacks.onReady();
+  assert.equal(harness.state().status, 'failed');
+  assert.equal(harness.state().errorMessage, failure);
+  assert.equal(connections[0].completed, false);
+  harness.unmount();
+});
+
+test('live error UI reveals only the endpoint host, never credentials, path, query, or raw server errors', () => {
+  const message = liveErrors.getLiveTranscriptionUserMessage('LIVE_CONNECTION_TIMEOUT', 'http://user:secret@10.0.0.104:8787/private-path?token=secret#secret');
+  assert.match(message, /10\.0\.0\.104:8787/);
+  assert.doesNotMatch(message, /user|secret|private-path|token=/);
+  assert.match(liveErrors.getLiveTranscriptionUserMessage('LIVE_API_URL_MISSING', null), /EXPO_PUBLIC_API_URL/);
+  assert.match(liveErrors.getLiveTranscriptionUserMessage('LIVE_CAPTURE_UNAVAILABLE', 'http://atlas.test'), /microphone streaming/);
+});
+
+test('missing native stream metadata is diagnosed as capture failure, not missing backend configuration', async () => {
+  const { live, connections, harness, logs } = setup();
+  assert.equal(await live.startLiveTranscription({ recorderSessionId: 'missing-rate', actualSampleRate: null }), false);
+  assert.equal(connections.length, 0);
+  assert.match(harness.state().errorMessage, /microphone streaming/);
+  assert.ok(logs.some((entry) => entry[3].code === 'LIVE_CAPTURE_UNAVAILABLE'));
   harness.unmount();
 });
 
@@ -235,3 +271,57 @@ for (const [nativeDuration, playableDuration, size] of [[5905, 1461, 68834], [67
     if (!result.passed) assert.ok(result.failedChecks.some((check) => check.id === 'native_matches_playable_duration'));
   });
 }
+
+test('save barrier includes final events during Stop before the UI batch publishes and survives reset', async () => {
+  const { live, connections, harness } = setup();
+  const { savedLiveSource } = load('src/features/recorder/recorder.transcripts.ts');
+  await live.startLiveTranscription({ recorderSessionId: 'multi-person', actualSampleRate: 24000 });
+  const callbacks = connections[0].callbacks;
+  callbacks.onReady();
+  callbacks.onDraft('First voice.', [{ itemId: 'a', deltaText: 'First voi', finalText: 'First voice.' }]);
+  let saved = false;
+  const finalization = live.finishLiveTranscription().then(snapshot => { saved = true; return savedLiveSource(snapshot, 'multi-person'); });
+  await Promise.resolve();
+  assert.equal(saved, false, 'saving must wait for live completion');
+  const segments = [{ itemId: 'a', deltaText: 'First voi', finalText: 'First voice.' }, { itemId: 'b', deltaText: ' quiet', finalText: ' quieter second voice.\n' }];
+  callbacks.onDraft('First voice.  quieter second voice.\n', segments);
+  assert.equal(harness.state().draft, 'First voice.', 'last event has not reached the batched UI');
+  callbacks.onCompleted();
+  const source = await finalization;
+  assert.equal(source.text, 'First voice.  quieter second voice.\n');
+  assert.equal(source.status, 'completed');
+  assert.equal(source.recorderSessionId, 'multi-person');
+  assert.equal(source.segments[1].finalText, ' quieter second voice.\n');
+  segments[1].finalText = 'external mutation';
+  live.resetLiveTranscription();
+  callbacks.onDraft('late stale event');
+  assert.equal(source.segments[1].finalText, ' quieter second voice.\n');
+  assert.equal(live.getLiveSnapshot().draft, '');
+  harness.unmount();
+});
+
+test('Stop timeout retains accumulated text as failed instead of hanging or reporting completed', async () => {
+  const timers = new Map();
+  const { live, connections, harness } = setup({ setTimeout: (fn, ms) => { timers.set(ms, fn); return ms; }, clearTimeout: ms => timers.delete(ms) });
+  await live.startLiveTranscription({ recorderSessionId: 'timeout', actualSampleRate: 24000 });
+  connections[0].callbacks.onDraft('Words already received.');
+  const finalization = live.finishLiveTranscription();
+  timers.get(16000)();
+  const result = await finalization;
+  assert.equal(result.status, 'failed');
+  assert.equal(result.draft, 'Words already received.');
+  assert.match(result.errorMessage, /timed out/);
+  assert.equal(connections[0].closed, true);
+  harness.unmount();
+});
+
+test('background during Stop releases save barrier with a partial source, not a completed transcript', async () => {
+  const { live, connections, background, harness } = setup();
+  await live.startLiveTranscription({ recorderSessionId: 'background', actualSampleRate: 24000 });
+  connections[0].callbacks.onDraft('Before background.');
+  const finalization = live.finishLiveTranscription();
+  background('background');
+  assert.equal((await finalization).status, 'paused');
+  assert.equal((await finalization).draft, 'Before background.');
+  harness.unmount();
+});

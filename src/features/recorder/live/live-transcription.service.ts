@@ -31,7 +31,7 @@ export class LiveTranscriptionConnectionError extends Error {
 
 interface LiveTranscriptionConnectionCallbacks {
   onCompleted: () => void;
-  onDraft: (draft: string) => void;
+  onDraft: (draft: string, segments?: import('../recorder.types').LiveTranscriptSegment[]) => void;
   onFailure: (error: LiveTranscriptionConnectionError) => void;
   onReady: (backendRevision: string | null) => void;
 }
@@ -381,11 +381,11 @@ export class LiveTranscriptionConnection {
     const draft = order
       .map((id) => {
         const segment = this.segments.get(id);
-        return (segment?.final ?? segment?.draft ?? '').trim();
+        return segment?.final ?? segment?.draft ?? '';
       })
       .filter(Boolean)
       .join(' ');
-    this.callbacks.onDraft(draft);
+    this.callbacks.onDraft(draft, order.map(itemId => ({ itemId, deltaText: this.segments.get(itemId)?.draft ?? '', finalText: this.segments.get(itemId)?.final ?? null })));
   }
 
   private schedulePump(delay: number): void {

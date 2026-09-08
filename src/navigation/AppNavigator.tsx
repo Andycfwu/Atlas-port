@@ -9,10 +9,12 @@ import { ChatHistoryScreen } from '../features/chat/ChatHistoryScreen';
 import { useChats } from '../features/chat/ChatProvider';
 import { chatColors as c } from '../features/chat/chat.theme';
 import { RecorderScreen, RecordingDetailScreen, useRecorder } from '../features/recorder';
+import type { SavedRecording } from '../features/recorder/recorder.types';
+import { MeetingMemoryScreen } from '../features/memory/MeetingMemoryScreen';
 import { AppDrawer, type AppDestination } from './AppDrawer';
 
 const titles: Record<AppDestination, string> = {
-  atlas: 'Atlas', search: 'Search Chats', history: 'Chat History', files: 'File Browser', recorder: 'Live Transcription', settings: 'Profile/Settings',
+  atlas: 'Atlas', search: 'Search Chats', history: 'Chat History', files: 'File Browser', recorder: 'Live Transcription', settings: 'Profile/Settings', memory: 'Meeting Memory',
 };
 
 export function AppNavigator() {
@@ -20,6 +22,7 @@ export function AppNavigator() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
+  const [recordingImport, setRecordingImport] = useState<SavedRecording | null>(null);
   const { isRecording } = useRecorder();
   const { store, error, ready } = useChats();
 
@@ -30,6 +33,7 @@ export function AppNavigator() {
   }, []);
   useEffect(() => {
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (destination === 'memory') return false; // Meeting Memory handles its own internal back stack.
       if (destination === 'recorder' && selectedRecordingId) { setSelectedRecordingId(null); return true; }
       if (destination !== 'atlas') { setDestination('atlas'); return true; }
       return false;
@@ -52,12 +56,13 @@ export function AppNavigator() {
         {error ? <View style={styles.notice}><Text accessibilityRole="alert" style={styles.noticeText}>{error}</Text>{!ready ? <Pressable accessibilityRole="button" onPress={store.hydrate} style={styles.retry}><Text style={styles.retryText}>Retry</Text></Pressable> : null}</View> : null}
         {isRecording && destination !== 'recorder' ? <Pressable accessibilityRole="button" accessibilityLabel="Recording in progress. Return to Live Transcription" onPress={() => { setSelectedRecordingId(null); navigate('recorder'); }} style={styles.recording}><View style={styles.recordingDot} /><Text style={styles.recordingText}>Recording in progress</Text><Text style={styles.recordingText}>Return →</Text></Pressable> : null}
         <View style={styles.destination}>
+          <MeetingMemoryScreen recordingImport={recordingImport} onImportHandled={() => setRecordingImport(null)} active={destination === 'memory'} onExit={() => navigate('atlas')} />
           {destination === 'atlas' ? <AtlasScreen keyboardVisible={keyboardVisible} />
             : destination === 'search' || destination === 'history' ? <ChatHistoryScreen key={destination} search={destination === 'search'} onOpenChat={openChat} onNewChat={newChat} />
               : destination === 'recorder' ? selectedRecordingId
-                ? <RecordingDetailScreen onBack={() => setSelectedRecordingId(null)} onDeleted={() => setSelectedRecordingId(null)} recordingId={selectedRecordingId} />
+                ? <RecordingDetailScreen onMeetingMemory={recording => { setRecordingImport(recording); navigate('memory'); }} onBack={() => setSelectedRecordingId(null)} onDeleted={() => setSelectedRecordingId(null)} recordingId={selectedRecordingId} />
                 : <RecorderScreen onOpenRecording={setSelectedRecordingId} />
-                : <SafeAreaView edges={['bottom']} style={styles.destination}><ScrollView contentContainerStyle={styles.comingSoon}>
+                : destination === 'memory' ? null : <SafeAreaView edges={['bottom']} style={styles.destination}><ScrollView contentContainerStyle={styles.comingSoon}>
                   <AtlasMark /><Text style={styles.soonEyebrow}>COMING SOON</Text><Text accessibilityRole="header" style={styles.soonTitle}>{titles[destination]}</Text>
                   <Text style={styles.soonBody}>{destination === 'files' ? 'A home for the files behind your next move. File browsing and attachments aren’t available yet.' : 'Your Atlas preferences will live here. Profiles and account sign-in aren’t available yet.'}</Text>
                   <Pressable accessibilityRole="button" onPress={() => navigate('atlas')} style={styles.backToChat}><Text style={styles.backToChatText}>Back to Atlas</Text></Pressable>

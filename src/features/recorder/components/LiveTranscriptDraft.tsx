@@ -27,11 +27,13 @@ export function LiveTranscriptDraft({ state }: LiveTranscriptDraftProps) {
     : state.status === 'connecting'
       ? 'Connecting to Atlas transcription…'
       : state.status === 'paused'
-        ? 'Live draft paused in the background. The saved recording continues.'
+        ? 'Live text paused in the background. Save this recording before starting another.'
         : state.status === 'failed'
           ? (state.errorMessage ?? 'Live transcript unavailable. Use saved-file transcription after saving.')
-          : state.status === 'completed' || state.status === 'finishing'
-            ? 'Use the saved recording for the final transcript.'
+          : state.status === 'finishing'
+            ? 'Waiting for final live words before saving…'
+          : state.status === 'completed'
+            ? 'No live words were received. Transcribe the saved audio instead.'
           : 'Listening for speech…';
 
   return (
@@ -58,13 +60,13 @@ export function LiveTranscriptDraft({ state }: LiveTranscriptDraftProps) {
         </View>
       </View>
       <ScrollView nestedScrollEnabled style={styles.draftScroll}>
-        <Text selectable style={styles.draftText}>
+        <Text accessibilityLiveRegion="polite" selectable style={styles.draftText}>
           {body}
         </Text>
       </ScrollView>
-      {state.draft && state.errorMessage ? <Text style={styles.disclaimer}>{state.errorMessage}</Text> : null}
+      {state.draft && state.errorMessage ? <Text accessibilityRole="alert" style={styles.failureMessage}>{state.errorMessage}</Text> : null}
       <Text style={styles.disclaimer}>
-        Draft only. The saved M4A transcript remains authoritative.
+        Live text is saved separately from post-recording text. Review both against the original audio.
       </Text>
     </View>
   );
@@ -132,5 +134,11 @@ const styles = StyleSheet.create({
     color: colors.mutedInk,
     fontSize: 9,
     lineHeight: 14,
+  },
+  failureMessage: {
+    marginTop: 12,
+    color: colors.danger,
+    fontSize: 13,
+    lineHeight: 20,
   },
 });

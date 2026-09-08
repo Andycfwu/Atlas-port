@@ -18,13 +18,14 @@ const setup = () => {
   const { LiveTranscriptionConnection } = load('src/features/recorder/live/live-transcription.service.ts', {}, { WebSocket: Socket });
   const events = [];
   const revisions = [];
+  const snapshots = [];
   const connection = new LiveTranscriptionConnection('ws://test', { actualSampleRate: 24000, channels: 1, encoding: 'int16', requestedSampleRate: 24000, traceId: 'trace-id' }, {
-    onReady: (revision) => { revisions.push(revision); events.push('ready'); }, onDraft: (draft) => events.push(draft), onFailure: (error) => events.push(error.code), onCompleted: () => events.push('completed'),
+    onReady: (revision) => { revisions.push(revision); events.push('ready'); }, onDraft: (draft, segments) => { events.push(draft); snapshots.push(segments); }, onFailure: (error) => events.push(error.code), onCompleted: () => events.push('completed'),
   });
   connection.connect();
   socket.readyState = 1;
   socket.onopen();
-  return { connection, socket, events, revisions, message: (value) => socket.onmessage({ data: JSON.stringify({ ...value, traceId: 'trace-id' }) }) };
+  return { connection, socket, events, revisions, snapshots, message: (value) => socket.onmessage({ data: JSON.stringify({ ...value, traceId: 'trace-id' }) }) };
 };
 const pcm = () => ({ data: new ArrayBuffer(4800), sampleRate: 24000, channels: 1 });
 
@@ -83,4 +84,18 @@ test('server completion before Stop is rejected and late events after close are 
   message({ type: 'completed' });
   message({ type: 'partial', itemId: 'late', delta: 'late draft' });
   assert.deepEqual(events, ['LIVE_INVALID_RESPONSE']);
+});
+
+
+test('live snapshots preserve raw delta and final strings for every item without speaker guesses', () => {
+  const { connection, message, events, snapshots } = setup();
+  message({ type: 'committed', itemId: 'a', previousItemId: null });
+  message({ type: 'committed', itemId: 'b', previousItemId: 'a' });
+  message({ type: 'partial', itemId: 'a', delta: '  perhaps' });
+  message({ type: 'partial', itemId: 'a', delta: ' forty' });
+  message({ type: 'final', itemId: 'b', transcript: 'No, fifty.\n' });
+  message({ type: 'final', itemId: 'a', transcript: '  Perhaps forty. ' });
+  assert.equal(events.at(-1), '  Perhaps forty.  No, fifty.\n');
+  assert.deepEqual(snapshots.at(-1), [{ itemId: 'a', deltaText: '  perhaps forty', finalText: '  Perhaps forty. ' }, { itemId: 'b', deltaText: '', finalText: 'No, fifty.\n' }]);
+  connection.close('test_finished');
 });

@@ -5,13 +5,14 @@ import { AppState } from 'react-native';
 import { appConfig } from '../../../config/app.config';
 import { createTranscriptionTraceId, getBackendHost, logTranscriptionEvent } from '../recording-transcription.errors';
 import { deriveLiveTranscriptionWebSocketUrl, LiveTranscriptionConnection } from './live-transcription.service';
+import { getLiveTranscriptionUserMessage } from './live-transcription.errors';
 import type { LiveTranscriptionStartOptions, LiveTranscriptionState } from './live-transcription.types';
+import type { LiveTranscriptSegment } from '../recorder.types';
 
 const INITIAL_STATE: LiveTranscriptionState = {
   actualSampleRate: null, draft: '', errorMessage: null, status: 'idle', traceId: null,
 };
-const UNAVAILABLE = 'Live transcript unavailable. After saving, use the recording’s Transcribe action.';
-const CLIENT_REVISION = 'live-pcm-after-prepare-3';
+const CLIENT_REVISION = 'live-network-guidance-4';
 const emptyDelivery = () => ({ nativeBuffers: 0, nativeBytes: 0, firstBufferAt: 0, lastBufferAt: 0, draftPublished: false });
 
 // A network-only consumer. It has no native stream or audio-session controls.
@@ -21,6 +22,9 @@ export const useLiveTranscription = () => {
   const connectionRef = useRef<LiveTranscriptionConnection | null>(null);
   const generation = useRef(0);
   const draftRef = useRef('');
+  const segmentsRef = useRef<LiveTranscriptSegment[]>([]);
+  const finishWaiters = useRef(new Set<(snapshot: LiveTranscriptionState) => void>());
+  const snapshot = useCallback((): LiveTranscriptionState => ({ ...stateRef.current, draft: draftRef.current, segments: segmentsRef.current.map(s => ({ ...s })) }), []);
   const batchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failureTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const delivery = useRef(emptyDelivery());
@@ -28,7 +32,11 @@ export const useLiveTranscription = () => {
   const publish = useCallback((patch: Partial<LiveTranscriptionState>) => {
     stateRef.current = { ...stateRef.current, ...patch };
     setState(stateRef.current);
-  }, []);
+    if (['idle', 'completed', 'failed', 'paused'].includes(stateRef.current.status)) {
+      for (const resolve of finishWaiters.current) resolve(snapshot());
+      finishWaiters.current.clear();
+    }
+  }, [snapshot]);
   const clearTimers = useCallback(() => {
     if (batchTimer.current) clearTimeout(batchTimer.current);
     if (failureTimer.current) clearTimeout(failureTimer.current);
@@ -53,7 +61,7 @@ export const useLiveTranscription = () => {
     generation.current += 1;
     connectionRef.current?.close(reason);
     connectionRef.current = null;
-    publish({ draft: draftRef.current, status: nextStatus, errorMessage: nextStatus === 'failed' ? UNAVAILABLE : null });
+    publish({ draft: draftRef.current, status: nextStatus, errorMessage: nextStatus === 'failed' ? getLiveTranscriptionUserMessage(reason, appConfig.apiUrl) : null });
     if (current.traceId) {
       logTranscriptionEvent(nextStatus === 'failed' ? 'warn' : 'info',
         nextStatus === 'failed' ? 'LIVE_STREAM_FAILED' : 'LIVE_STREAM_PAUSED', current.traceId,
@@ -62,14 +70,17 @@ export const useLiveTranscription = () => {
   }, [clearTimers, publish]);
 
   const resetLiveTranscription = useCallback(() => {
+    for (const resolve of finishWaiters.current) resolve({ ...snapshot(), status: 'paused' });
+    finishWaiters.current.clear();
     generation.current += 1;
     clearTimers();
     connectionRef.current?.close('new_recording');
     connectionRef.current = null;
     draftRef.current = '';
+    segmentsRef.current = [];
     delivery.current = emptyDelivery();
     publish(INITIAL_STATE);
-  }, [clearTimers, publish]);
+  }, [clearTimers, publish, snapshot]);
 
   const startLiveTranscription = useCallback(async ({ recorderSessionId, actualSampleRate, captureError, forceFailure }: LiveTranscriptionStartOptions) => {
     resetLiveTranscription();
@@ -88,7 +99,8 @@ export const useLiveTranscription = () => {
     };
     const url = deriveLiveTranscriptionWebSocketUrl(appConfig.apiUrl);
     if (!url || captureError || actualSampleRate === null) {
-      fail(captureError ? 'LIVE_CAPTURE_UNAVAILABLE' : 'LIVE_API_URL_MISSING', captureError ?? 'Live backend URL unavailable.');
+      const captureUnavailable = Boolean(captureError) || actualSampleRate === null;
+      fail(captureUnavailable ? 'LIVE_CAPTURE_UNAVAILABLE' : 'LIVE_API_URL_MISSING', captureError ?? (captureUnavailable ? 'Live capture sample rate unavailable.' : 'Live backend URL unavailable.'));
       return false;
     }
     try {
@@ -100,9 +112,10 @@ export const useLiveTranscription = () => {
           if (stateRef.current.status !== 'finishing') publish({ status: 'streaming' });
           logTranscriptionEvent('info', 'LIVE_CONNECTION_READY', traceId, { backendHost, recorderSessionId, actualSampleRate, backendRevision });
         },
-        onDraft: (draft) => {
+        onDraft: (draft, segments = []) => {
           if (id !== generation.current) return;
           draftRef.current = draft;
+          segmentsRef.current = segments;
           if (!batchTimer.current) batchTimer.current = setTimeout(() => {
             batchTimer.current = null;
             if (id !== generation.current) return;
@@ -147,6 +160,14 @@ export const useLiveTranscription = () => {
     }
     connection.sendAudio(buffer);
   }, []);
+  const finishLiveTranscription = useCallback((): Promise<LiveTranscriptionState> => {
+    stopLiveTranscription('recording_stop_requested');
+    if (stateRef.current.status !== 'finishing') return Promise.resolve(snapshot());
+    return new Promise(resolve => {
+      const timer = setTimeout(() => stopLiveTranscription('LIVE_CONNECTION_TIMEOUT', 'failed'), 16_000);
+      finishWaiters.current.add(value => { clearTimeout(timer); resolve(value); });
+    });
+  }, [snapshot, stopLiveTranscription]);
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (next) => {
       if (next !== 'active') stopLiveTranscription('app_backgrounded', 'paused');
@@ -154,10 +175,12 @@ export const useLiveTranscription = () => {
     return () => subscription.remove();
   }, [stopLiveTranscription]);
   useEffect(() => () => {
+    for (const resolve of finishWaiters.current) resolve({ ...snapshot(), status: 'paused' });
+    finishWaiters.current.clear();
     generation.current += 1;
     clearTimers();
     connectionRef.current?.close('provider_unmounted');
     connectionRef.current = null;
-  }, [clearTimers]);
-  return { resetLiveTranscription, sendLiveAudio, startLiveTranscription, state, stopLiveTranscription };
+  }, [clearTimers, snapshot]);
+  return { finishLiveTranscription, getLiveSnapshot: snapshot, resetLiveTranscription, sendLiveAudio, startLiveTranscription, state, stopLiveTranscription };
 };

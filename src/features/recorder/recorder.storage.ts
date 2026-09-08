@@ -1,4 +1,5 @@
 import { Directory, File, Paths } from 'expo-file-system';
+import { postSources } from './recorder.transcripts';
 
 import {
   createRecordingId,
@@ -20,6 +21,7 @@ import {
 import type { TranscriptionFailureDetails } from './recording-transcription.types';
 import type {
   SavedRecording,
+  SavedLiveTranscript,
   TranscriptionStatus,
 } from './recorder.types';
 
@@ -231,7 +233,7 @@ const writeRecordingMetadata = (
   );
 };
 
-export const loadRecordings = async (): Promise<SavedRecording[]> => {
+const loadRecordingsUnqueued = async (): Promise<SavedRecording[]> => {
   const directory = ensureRecordingsDirectory();
   const metadataFile = new File(directory, METADATA_FILENAME);
 
@@ -256,7 +258,6 @@ export const loadRecordings = async (): Promise<SavedRecording[]> => {
         if (__DEV__) {
           console.warn('[RecorderStorage] Ignoring malformed metadata entry.', {
             index,
-            entry,
           });
         }
         return;
@@ -305,7 +306,7 @@ export const loadRecordings = async (): Promise<SavedRecording[]> => {
             }
           : normalizedEntry;
 
-      if (retryableEntry !== entry) {
+      if (retryableEntry !== normalizedEntry) {
         shouldCleanMetadata = true;
 
         if (__DEV__) {
@@ -510,7 +511,7 @@ export const persistVerifiedRecordingFile = async (
   }
 };
 
-export const saveRecordingMetadata = async (
+const saveRecordingMetadataUnqueued = async (
   recording: SavedRecording,
 ): Promise<void> => {
   const existingRecordings = await readRecordingsForMutation();
@@ -522,7 +523,7 @@ export const saveRecordingMetadata = async (
   writeRecordingMetadata(recordings);
 };
 
-export const updateRecordingTranscription = async (
+const updateRecordingTranscriptionUnqueued = async (
   recordingId: string,
   transcriptionStatus: TranscriptionStatus,
   transcript: string | null,
@@ -536,7 +537,10 @@ export const updateRecordingTranscription = async (
     throw new Error('The recording metadata could not be found for transcription.');
   }
 
-  const normalizedTranscript = transcript?.trim() || null;
+  // Only validate with trim; retain the exact provider string.
+  const normalizedTranscript = transcript?.trim() ? transcript : null;
+  if (transcriptionStatus !== 'transcribing' && recording.transcriptionTraceId !== traceId) return recording;
+  const history = postSources(recording);
 
   if (transcriptionStatus === 'complete' && !normalizedTranscript) {
     throw new Error('A completed transcription must contain transcript text.');
@@ -544,7 +548,10 @@ export const updateRecordingTranscription = async (
 
   const updatedRecording: SavedRecording = {
     ...recording,
-    transcript: normalizedTranscript,
+    transcript: normalizedTranscript ?? recording.transcript,
+    postTranscripts: transcriptionStatus === 'complete' && normalizedTranscript
+      ? [...history.filter(item => item.traceId !== traceId), { source: 'saved_audio', text: normalizedTranscript, traceId, model: 'gpt-transcribe', savedAt: new Date().toISOString() }]
+      : history,
     transcriptionStatus,
     transcriptionTraceId: traceId,
     latestTranscriptionFailure:
@@ -558,7 +565,7 @@ export const updateRecordingTranscription = async (
   return updatedRecording;
 };
 
-export const renameRecording = async (
+const renameRecordingUnqueued = async (
   recordingId: string,
   title: string,
 ): Promise<SavedRecording> => {
@@ -584,7 +591,7 @@ export const renameRecording = async (
   return renamedRecording;
 };
 
-export const deleteRecording = async (
+const deleteRecordingUnqueued = async (
   recording: SavedRecording,
 ): Promise<void> => {
   const audioFile = new File(recording.uri);
@@ -633,3 +640,25 @@ export const deleteRecording = async (
     );
   }
 };
+
+// Serialize every read/modify/write, including startup normalization and deletion.
+// Otherwise a late post-transcription or rename can overwrite another recording.
+let metadataQueue: Promise<unknown> = Promise.resolve();
+function serializeMetadata<T>(work: () => Promise<T>): Promise<T> {
+  const result = metadataQueue.then(work);
+  metadataQueue = result.catch(() => undefined);
+  return result;
+}
+export const loadRecordings = (...args: Parameters<typeof loadRecordingsUnqueued>) => serializeMetadata(() => loadRecordingsUnqueued(...args));
+export const saveRecordingMetadata = (...args: Parameters<typeof saveRecordingMetadataUnqueued>) => serializeMetadata(() => saveRecordingMetadataUnqueued(...args));
+export const updateRecordingTranscription = (...args: Parameters<typeof updateRecordingTranscriptionUnqueued>) => serializeMetadata(() => updateRecordingTranscriptionUnqueued(...args));
+export const renameRecording = (...args: Parameters<typeof renameRecordingUnqueued>) => serializeMetadata(() => renameRecordingUnqueued(...args));
+export const deleteRecording = (...args: Parameters<typeof deleteRecordingUnqueued>) => serializeMetadata(() => deleteRecordingUnqueued(...args));
+
+// Recovery copy survives even if recordings.json cannot be updated. Never touches audio.
+export function preserveLiveTranscript(sessionId: string, transcript: SavedLiveTranscript | null): void {
+  if (!transcript) return;
+  const directory = new Directory(Paths.document, 'atlas-recording-recovery');
+  directory.create({ intermediates: true, idempotent: true });
+  new File(directory, `${sessionId}.live.json`).write(JSON.stringify(transcript));
+}

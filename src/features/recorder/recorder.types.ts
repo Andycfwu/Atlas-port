@@ -17,6 +17,21 @@ export interface SavedRecording {
   transcriptionStatus: TranscriptionStatus;
   transcriptionTraceId: string | null;
   latestTranscriptionFailure: TranscriptionFailureDetails | null;
+  /** Historical recordings have no saved live source. Never infer it from post text. */
+  liveTranscript?: SavedLiveTranscript | null;
+  postTranscripts?: SavedPostTranscript[];
+}
+
+export interface LiveTranscriptSegment { itemId: string; deltaText: string; finalText: string | null }
+export interface SavedLiveTranscript {
+  source: 'live'; text: string; segments: LiveTranscriptSegment[];
+  status: 'completed' | 'paused' | 'failed' | 'finishing';
+  traceId: string | null; recorderSessionId: string;
+  model: 'gpt-live-transcribe'; savedAt: string; errorMessage: string | null;
+}
+export interface SavedPostTranscript {
+  source: 'saved_audio'; text: string; traceId: string | null;
+  model: string | null; savedAt: string | null;
 }
 
 export type RecorderPhase = 'idle' | 'starting' | 'recording' | 'stopping' | 'error';

@@ -1,3 +1,4 @@
+import { uploadSizeMatches, originalTranscriptionText } from './transcription-integrity.mjs';
 import { createReadStream } from 'node:fs';
 import { createServer } from 'node:http';
 import { unlink } from 'node:fs/promises';
@@ -10,6 +11,11 @@ import OpenAI, { toFile } from 'openai';
 
 import { attachLiveTranscriptionWebSocketServer } from './live-transcription-server.mjs';
 import { getLiveRuntimeStatus } from './live-transcription-runtime.mjs';
+import { MeetingStore } from './memory/store.mjs';
+import { MeetingMemoryService } from './memory/service.mjs';
+import { createMemoryProvider } from './memory/provider.mjs';
+import { createMemoryRouter } from './memory/router.mjs';
+import { fileURLToPath } from 'node:url';
 
 import {
   logBackendTranscriptionEvent,
@@ -97,6 +103,10 @@ app.get('/health', (_request, response) => {
   response.json({ ok: true, live: getLiveRuntimeStatus() });
 });
 
+const meetingStore = new MeetingStore(process.env.MEMORY_DB_PATH || fileURLToPath(new URL('./data/meeting-memory.sqlite', import.meta.url)));
+const meetingMemory = new MeetingMemoryService(meetingStore, createMemoryProvider(openai));
+app.use('/v1/memory', createMemoryRouter(meetingMemory));
+
 app.use('/transcribe', (request, response, next) => {
   const trace = getTraceContext(request);
   response.set('X-Atlas-Trace-Id', trace.traceId);
@@ -160,6 +170,10 @@ app.post('/transcribe', upload.single('file'), async (request, response) => {
     mimeType: uploadedFile.mimetype?.toLowerCase() || 'application/octet-stream',
   };
 
+  if (!uploadSizeMatches(request.headers['x-atlas-audio-bytes'], uploadedFile.size)) {
+    throw new TranscriptionServerError({ code: 'UPLOAD_REJECTED', httpStatus: 400,
+      message: 'The uploaded byte count does not match the saved audio. Retry transcription; the original audio remains on your phone.', stage: 'upload_rejected' });
+  }
   if (uploadedFile.size <= 0) {
     throw new TranscriptionServerError({
       code: 'INVALID_AUDIO_FILE',
@@ -171,6 +185,7 @@ app.post('/transcribe', upload.single('file'), async (request, response) => {
 
   logBackendTranscriptionEvent('info', 'UPLOAD_ACCEPTED', trace.traceId, {
     fileMetadata: trace.fileMetadata,
+    expectedByteSize: request.headers['x-atlas-audio-bytes'] ?? null,
     stage: 'upload_accepted',
   });
 
@@ -211,14 +226,9 @@ app.post('/transcribe', upload.single('file'), async (request, response) => {
       },
     );
 
-    const text =
-      typeof transcription === 'string'
-        ? transcription.trim()
-        : typeof transcription.text === 'string'
-          ? transcription.text.trim()
-          : '';
+    const text = originalTranscriptionText(transcription);
 
-    if (!text) {
+    if (!text.trim()) {
       throw new TranscriptionServerError({
         code: 'EMPTY_TRANSCRIPT',
         httpStatus: 502,
@@ -231,6 +241,7 @@ app.post('/transcribe', upload.single('file'), async (request, response) => {
 
     logBackendTranscriptionEvent('info', 'TRANSCRIPT_VALIDATED', trace.traceId, {
       characterCount: text.length,
+      responseSegmentCount: Array.isArray(transcription?.segments) ? transcription.segments.length : null,
       openAIRequestId,
       stage: 'transcript_validated',
     });
