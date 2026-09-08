@@ -1,3 +1,14 @@
+# Atlas brand asset status
+
+The mobile chat shell uses a native compass placeholder in
+`src/features/chat/AtlasMark.tsx`; an official Atlas compass/logo asset is needed.
+The drawer reuses `assets/realtorch-torch.png` alongside a text wordmark. Supply
+an official full RealTorch wordmark (ideally transparent PNG or a vector source)
+for an exact brand match. No screenshot portrait, name, or email is used.
+
+The files below belong to the earlier sound demo. They remain for compatibility
+with its retained audio provider, but are not shown or played as chat responses.
+
 # Atlas demo assets
 
 The proof of concept expects these local, bundled files:

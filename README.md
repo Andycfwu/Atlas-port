@@ -1,18 +1,26 @@
 # RealTorch Atlas Mobile
 
-A RealTorch-themed React Native proof of concept for the future Atlas mobile
-client. The app currently provides two destinations:
+An interactive Atlas mobile shell, adapted from the desktop reference, with
+local conversations and the existing voice recorder / live transcription screen.
 
-- **Atlas** — founder avatar plus coordinated Moo, Oink, Rooster, and Bark local
-  audio responses
-- **Recorder** — durable foreground and background voice capture with a local
-  saved-recordings library
+- **Atlas** — welcome screen, Find It / Plan It / Sell It suggestions, and a
+  keyboard-aware text composer. Suggestions populate the composer without sending.
+- **Menu** — New Chat, Search Chats, Chat History, File Browser, Live
+  Transcription, and Profile/Settings. File Browser and Profile/Settings are
+  clearly marked **Coming soon**.
+- **Local chats** — create, send, reopen, and search conversation titles and
+  message contents. Sending saves only a user message and displays
+  **“Atlas isn’t connected yet.”** No generated replies or Atlas API calls.
+- **Live Transcription** — the existing recorder, live draft, saved recordings,
+  playback, sharing, and post-stop transcription remain on a separate screen.
 
-The implementation uses Expo SDK 57, strict TypeScript, `expo-audio`, and the
-modern `expo-file-system` API. It contains no authentication, database, cloud
-synchronization, or client-side AI credentials. An isolated development Node
-server supports optional provisional live transcription and authoritative
-post-stop transcription.
+The implementation uses the existing Expo SDK 57 setup, strict TypeScript,
+`expo-audio`, and modern `expo-file-system`. Chat authentication, cloud sync,
+attachments, and Atlas backend integration are outside this milestone. The
+separate development Node server continues to support the existing optional
+live and saved-recording transcription; the chat shell does not call it.
+
+See [the shell handoff and verification notes](docs/atlas-shell.md).
 
 ## Requirements
 
@@ -40,27 +48,45 @@ After changing the plugin configuration, create a fresh native development build
 Expo Go does not contain project-specific native configuration and is not a valid
 background-recording test environment.
 
-## Local Atlas assets
+## Brand assets
 
-Bundled assets live in `assets/atlas`:
+The menu reuses `assets/realtorch-torch.png` with a text RealTorch wordmark.
+`src/features/chat/AtlasMark.tsx` contains a simple native compass placeholder.
+The official Atlas compass/logo asset and the full RealTorch wordmark asset are
+still needed. No identity or email from the desktop reference is used.
 
-- `founder.png`
-- `moo.mp3`
-- `oink.mp3`
-- `rooster.mp3`
-- `bark.mp3`
+The earlier founder portrait and animal audio demo assets remain in `assets/atlas`
+and their provider remains mounted for existing recorder audio coordination.
+They are no longer presented as Atlas responses in the chat shell.
 
-They are registered centrally in `src/features/atlas/atlas.assets.ts`. A single
-application-level `AnimalSoundProvider` owns playback. Replacing the active
-source stops the previous sound, so only one animal response can play at a time.
-The original Rooster and Bark WAV source files are retained in
-`assets/atlas/source` and are not part of the active Metro asset map.
+## Local chat persistence and future integration
+
+`src/features/chat/chat.model.ts` defines local user messages and conversations.
+`chat.store.ts` owns creation, selection, drafts, and send actions independently
+of React. `ChatProvider.tsx` connects that store to the shell UI.
+`chat.storage.ts` implements the native repository using the same Documents API
+as the recorder, in a separate `Paths.document/atlas-chats/` directory.
+
+Two versioned JSON snapshots alternate on successful saves. If one is interrupted,
+loading recovers the previous readable snapshot and shows a notice. If neither is
+readable, writes stay disabled and the original files remain untouched. A failed
+save retains the composer draft for retry. Sent messages, empty chats explicitly
+created with New Chat, and the selected conversation persist across app restarts.
+Unsent drafts survive screen/menu navigation within the current session but are
+not saved across termination. Chats are local app data and are removed when the
+app is uninstalled; there is no account sync.
+
+`src/features/atlas/atlas.service.ts` is the existing, **unwired** future Atlas API
+boundary (`/v1/atlas/messages`). Once a backend is available, connect it through a
+separate submission layer and extend the local message schema for assistant
+responses and delivery state. Keep repository writes independent of network
+success. Do not connect chat by changing recorder or live-transcription providers.
 
 ## Voice recorder
 
-`RecorderProvider` is mounted above the two-destination application shell. The
+`RecorderProvider` is mounted above the application menu and all destinations. The
 native recorder therefore remains alive when the user navigates between Atlas
-and Recorder. One provider owns one `AudioRecorder`, and an operation guard
+and Live Transcription. One provider owns one `AudioRecorder`, and an operation guard
 prevents concurrent microphone sessions.
 
 Starting a recording performs these steps:
@@ -126,7 +152,7 @@ Tapping a library row opens a RealTorch recording-detail view. A single
 application-level `RecordingPlayerProvider` owns saved-recording playback and
 subscribes to Expo Audio's native player status for load state, position,
 duration, buffering, completion, and failures. Playback may continue while the
-user moves between Atlas and Recorder screens; beginning microphone capture
+user moves between Atlas and Live Transcription screens; beginning microphone capture
 always stops it.
 
 The detail view supports play, pause, resume, replay after completion, and
@@ -340,9 +366,10 @@ RealTorch mobile client
 ```text
 app/                         Application composition root and providers
 src/components/              Shared RealTorch mobile UI
-src/navigation/              Lightweight Atlas / Recorder destination shell
+src/navigation/              Lightweight destination shell and animated menu
 src/config/                  Public runtime config and visual palette
-src/features/atlas/          Atlas screen, sound provider, API contract, and types
+src/features/atlas/          Atlas chat UI, retained sound provider, and future API contract
+src/features/chat/           Local chat model, store, repository, history UI, and brand UI
 src/features/recorder/       Recorder, detail UI, playback, transcription, persistence, and types
 src/services/api/            Swappable RealTorch API client abstraction
 src/services/audio/          Shared serialized native audio-session coordination
@@ -356,5 +383,6 @@ server/live-transcription-*  Bounded WebSocket proxy, PCM resampling, and tests
 ```bash
 npm run typecheck
 npm run lint
+npm test
 npx expo install --check
 ```
