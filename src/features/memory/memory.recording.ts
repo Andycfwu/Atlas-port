@@ -1,11 +1,12 @@
+import type { DiarizedTranscript } from '../recorder/diarization/diarization.types';
 import { preferredTranscript } from '../recorder/recorder.transcripts';
 import type { SavedRecording } from '../recorder/recorder.types';
 import { intakeFromDraft } from './memory.intake';
 import type { IntakeDraft, MeetingIntake } from './memory.types';
 
 // Shared completed-transcript intake. No audio upload, cleanup or speaker inference.
-export function recordingDraft(recording: SavedRecording): IntakeDraft {
-  const source = preferredTranscript(recording);
+export function recordingDraft(recording: SavedRecording, diarized?: DiarizedTranscript): IntakeDraft {
+  const source = diarized ? { text: diarized.originalTranscript } : preferredTranscript(recording);
   if (!source) throw new Error('No saved transcript is available yet. Use Transcribe Recording, then try again.');
   const date = new Date(recording.createdAt);
   return { title: recording.title, date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`, participantsText: '', originalTranscript: source.text };
@@ -20,4 +21,9 @@ export function intakeFromRecording(recording: SavedRecording, details: IntakeDr
       model: source.model, status: source.source === 'live' ? source.status : 'completed' },
     speakers: [], segments: [],
   };
+}
+
+export function intakeFromDiarizedRecording(recording: SavedRecording, diarized: DiarizedTranscript, details: IntakeDraft, speakerNames: import('./memory.types').SpeakerNameInput[]): MeetingIntake {
+  if (diarized.recordingId !== recording.id) throw new Error('This speaker version belongs to a different recording.');
+  return { ...intakeFromDraft({ ...details, originalTranscript: diarized.originalTranscript }), diarizationId: diarized.id, speakerNames };
 }

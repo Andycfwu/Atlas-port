@@ -1,4 +1,8 @@
-# Atlas Meeting Memory — first milestone
+# Atlas Meeting Memory
+
+The [source-based topic pipeline milestone](source-topic-pipeline.md) supersedes the
+original indexing/publication design. It adds immutable revisions and generations,
+original-source topic chunks, omission review, atomic replacement and durable retry.
 
 Meeting Memory is available through the existing Atlas menu. Paste or import a
 UTF-8 `.txt` transcript, review its title/date/participants, save and process it,
@@ -103,8 +107,8 @@ containers; existing audio files do not automatically transfer between them.
 
 | Stage | Default model | Input / purpose |
 | --- | --- | --- |
-| Cleanup and organization | `gpt-5.6-sol` | Entire completed transcript, stable passage IDs, title, date and participant metadata. Produces separate cleaned passages and linked topics/items. |
-| Embeddings | `text-embedding-3-small`, 512 dimensions | Original contextual passages with adjacent passages and meeting metadata; questions are also embedded. |
+| Cleanup and organization | `gpt-5.6-sol` | Bounded completed-transcript windows, stable source IDs and metadata. Groups original sources and separately produces cleaned passages and linked notes/items. |
+| Embeddings | `text-embedding-3-small`, 512 dimensions | Generated topic title plus source-assembled original chunk text; questions are also embedded. |
 | Answers | `gpt-5.6-sol` | The question and retrieved **original** passages with source IDs and meeting metadata. No web search or external research tools. |
 
 Sol was selected for fidelity to uncertainty, speaker labels, and decision status
@@ -148,7 +152,7 @@ added before serving independent users.
 
 The original string is never trimmed, normalized, or replaced. UTF-8 import is
 validated strictly, including Unicode/BOM handling, and retains supplied line
-endings. Stable `P0001`-style IDs and UTF-16 start/end offsets refer to exact
+endings. Revision-qualified source-unit IDs (legacy `P0001` IDs retained) and UTF-16 start/end offsets refer to exact
 original substrings. Labels/timestamps stay in the text; participants do not
 supply missing speaker identities. Cleaned text is never used as the source for
 citations.
@@ -157,27 +161,25 @@ Identical imports with the same details deduplicate by a content fingerprint.
 An optional `sourceKey` makes saved-recording imports idempotent. Recording-source
 provenance also participates in the fingerprint, so independently captured live
 and post-recording versions cannot collapse into each other.
-Repeated process requests share the active job; ready meetings are unchanged
-unless explicitly reprocessed. Processing commits topics and the complete index
-in one transaction, replacing passage rows by `(meeting_id, passage_id)`.
-A failed attempt cannot leave a partially ready index. On backend restart,
-interrupted jobs become failed with a retry message; original text remains saved.
+Repeated process requests share the active job. New source-based chunks and vectors
+publish as one immutable generation in a transaction; failed replacement keeps the
+previous published generation usable. Interrupted jobs retain per-window checkpoints
+and become visibly retryable. See the source-pipeline document for additive migration,
+exact historical reads, revision intake, deletion, and durable processing identity.
 
 Back up the SQLite database with the backend stopped (or a SQLite-aware backup
 that includes WAL contents). There is no encryption-at-rest layer, deletion UI,
-migration UI, or backup service in this development milestone.
+migration UI, or scheduled backup service in this development milestone.
 
 ## Retrieval and evidence
 
-Passages group adjacent source lines up to about 1,100 characters. Embeddings
-include the original neighboring passages, not isolated sentences or summaries.
-Retrieval combines cosine similarity with Unicode-normalized keyword overlap,
-weighting numeric identifiers more heavily. Explicit meeting, exact participant
-(case-insensitive), and date filters apply before ranking.
+Source units preserve exact text; model-selected topic groups assemble original
+chunks, including nonadjacent recurring discussion. Oversized chunks split at unit
+boundaries. Embeddings combine title + original chunk body. Retrieval combines cosine
+similarity with Unicode keywords and numeric identifiers, then complete related
+chunks and adjacent original context. Filters apply before ranking. The current
+published generation is used; exact historical references remain readable.
 
-The highest-ranked passages expand through topic source links, bringing back
-nonadjacent recurrences and later corrections. Neighbor context is then included.
-Source IDs and meeting IDs survive ranking, expansion, generation and display.
 The answer prompt excludes unrelated small talk and distinguishes discussion,
 proposals, confirmed decisions, actions and uncertainty. Insufficient evidence or
 speaker ambiguity produces an explicit status or focused clarification.
@@ -192,12 +194,12 @@ citations, and broader real-meeting evaluation is required before relying on it.
 
 - At most 60,000 transcript characters / 240,000 imported UTF-8 bytes per meeting.
 - One backend process and one local user. Up to two meeting jobs and two questions
-  in flight; no durable worker queue or multi-process coordination.
+  in flight, durable SQLite checkpoints and leases; no distributed worker deployment.
 - SQLite stores vectors as JSON and ranks them in memory. This is for a small
   development library, not a large corpus or production vector database.
-- Retrieval uses six ranked seeds and a 72-passage context budget. The UI reports
+- Retrieval uses six ranked seeds and a 42,000-byte compact evidence budget. The UI reports
   truncation if topic expansion exceeds that budget; filtering can narrow scope.
-- Processing has a six-minute abort deadline and each question a two-minute
+- Processing has a 15-minute abort deadline and each question a two-minute
   deadline. Clients time out with recovery guidance; they do not display mock
   answers or claim successful processing after a failure.
 - Model cleanup, grouping and answer meaning remain probabilistic. Exact quotes
@@ -239,6 +241,7 @@ npm run lint
 npm test
 npm run memory:verify
 npm run memory:verify:messy
+node --env-file=server/.env server/verify-source-pipeline.mjs
 ```
 
 `npm test` is deterministic and includes HTTP routes, UTF-8 integrity, filtering,
@@ -257,3 +260,10 @@ deterministic doubles for model-quality evaluation. Supplied speaker/segment
 metadata also follows processing, contextual embedding input and retrieved answer
 sources, while original audio remains on the phone. See the extension notes for
 the exact optional data contract and current timing limitations.
+
+## Post-recording diarization follow-up
+
+[Speaker identification is now implemented](meeting-diarization.md) as an explicit
+saved-audio action and separate source version. Optional names are confirmed in
+meeting intake/detail; corrections preserve prior cited snapshots. It does not
+change the default saved-live intake or align labels onto another transcript.

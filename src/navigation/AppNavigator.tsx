@@ -1,3 +1,4 @@
+import type { DiarizedTranscript } from '../features/recorder/diarization/diarization.types';
 import { useEffect, useState } from 'react';
 import { BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,6 +23,7 @@ export function AppNavigator() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
+  const [diarizedImport, setDiarizedImport] = useState<DiarizedTranscript | undefined>(undefined);
   const [recordingImport, setRecordingImport] = useState<SavedRecording | null>(null);
   const { isRecording } = useRecorder();
   const { store, error, ready } = useChats();
@@ -56,11 +58,11 @@ export function AppNavigator() {
         {error ? <View style={styles.notice}><Text accessibilityRole="alert" style={styles.noticeText}>{error}</Text>{!ready ? <Pressable accessibilityRole="button" onPress={store.hydrate} style={styles.retry}><Text style={styles.retryText}>Retry</Text></Pressable> : null}</View> : null}
         {isRecording && destination !== 'recorder' ? <Pressable accessibilityRole="button" accessibilityLabel="Recording in progress. Return to Live Transcription" onPress={() => { setSelectedRecordingId(null); navigate('recorder'); }} style={styles.recording}><View style={styles.recordingDot} /><Text style={styles.recordingText}>Recording in progress</Text><Text style={styles.recordingText}>Return →</Text></Pressable> : null}
         <View style={styles.destination}>
-          <MeetingMemoryScreen recordingImport={recordingImport} onImportHandled={() => setRecordingImport(null)} active={destination === 'memory'} onExit={() => navigate('atlas')} />
+          <MeetingMemoryScreen diarizedImport={diarizedImport} recordingImport={recordingImport} onImportHandled={() => { setRecordingImport(null); setDiarizedImport(undefined); }} active={destination === 'memory'} onExit={() => navigate('atlas')} />
           {destination === 'atlas' ? <AtlasScreen keyboardVisible={keyboardVisible} />
             : destination === 'search' || destination === 'history' ? <ChatHistoryScreen key={destination} search={destination === 'search'} onOpenChat={openChat} onNewChat={newChat} />
               : destination === 'recorder' ? selectedRecordingId
-                ? <RecordingDetailScreen onMeetingMemory={recording => { setRecordingImport(recording); navigate('memory'); }} onBack={() => setSelectedRecordingId(null)} onDeleted={() => setSelectedRecordingId(null)} recordingId={selectedRecordingId} />
+                ? <RecordingDetailScreen onMeetingMemory={(recording, diarized) => { setDiarizedImport(diarized); setRecordingImport(recording); navigate('memory'); }} onBack={() => setSelectedRecordingId(null)} onDeleted={() => setSelectedRecordingId(null)} recordingId={selectedRecordingId} />
                 : <RecorderScreen onOpenRecording={setSelectedRecordingId} />
                 : destination === 'memory' ? null : <SafeAreaView edges={['bottom']} style={styles.destination}><ScrollView contentContainerStyle={styles.comingSoon}>
                   <AtlasMark /><Text style={styles.soonEyebrow}>COMING SOON</Text><Text accessibilityRole="header" style={styles.soonTitle}>{titles[destination]}</Text>

@@ -1,3 +1,4 @@
+import type { DiarizationJob } from './diarization/diarization.types';
 import { Directory, File, Paths } from 'expo-file-system';
 import { postSources } from './recorder.transcripts';
 
@@ -264,6 +265,10 @@ const loadRecordingsUnqueued = async (): Promise<SavedRecording[]> => {
       }
 
       const normalizedEntry = normalizeSavedRecording(entry);
+      if (normalizedEntry.diarization?.status === 'uploading') {
+        normalizedEntry.diarization = { ...normalizedEntry.diarization, status: 'failed', error: 'The upload was interrupted. Retry identification; existing results are preserved.' };
+        shouldCleanMetadata = true;
+      }
       const storedFailureIsValid =
         entry.latestTranscriptionFailure === null ||
         isTranscriptionFailureDetails(entry.latestTranscriptionFailure);
@@ -662,3 +667,15 @@ export function preserveLiveTranscript(sessionId: string, transcript: SavedLiveT
   directory.create({ intermediates: true, idempotent: true });
   new File(directory, `${sessionId}.live.json`).write(JSON.stringify(transcript));
 }
+
+export const saveDiarizationJob = (recordingId: string, job: DiarizationJob): Promise<SavedRecording> => serializeMetadata(async () => {
+  const recordings = await readRecordingsForMutation();
+  const recording = recordings.find(r => r.id === recordingId);
+  if (!recording || job.recordingId !== recordingId || (job.result && (job.result.recordingId !== recordingId || job.result.id !== job.id))) throw new Error('Identification does not match this recording.');
+  const versions = recording.diarizedTranscripts ?? [];
+  const { result, ...state } = job;
+  const updated = { ...recording, diarization: state,
+    diarizedTranscripts: result && !versions.some(v => v.id === result.id) ? [...versions, result] : versions };
+  writeRecordingMetadata(recordings.map(r => r.id === recordingId ? updated : r));
+  return updated;
+});

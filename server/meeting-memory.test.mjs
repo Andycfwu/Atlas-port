@@ -1,3 +1,4 @@
+import { fixtureGrouping } from './memory/fixture-provider.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -18,6 +19,7 @@ function organization(meeting) {
   return { cleanedPassages: meeting.passages.map(p => ({ passageId: p.id, text: p.text, smallTalk: false })), topics: [{ title: '42 Cedar Lane drainage', summary: { text: 'Synthetic deterministic organization fixture.', sourceIds: ids }, items: [] }] };
 }
 const provider = {
+  group: fixtureGrouping, dimensions: 2,
   models: { organization: 'test-double', embedding: 'test-vector', answer: 'test-double' },
   organize: async m => organization(m),
   embed: async texts => texts.map(() => [1, 0]),
@@ -92,7 +94,7 @@ test('answers require a correct source, exact original quote and citations on ev
   assert.throws(() => validateAnswer({ ...valid, status: 'insufficient_evidence' }, sources));
 });
 
-test('create, retry, failed writes and restart keep one meeting and one index per passage', async () => {
+test('create, retry, failed writes and restart keep one meeting and one published source-chunk index', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'atlas-memory-test-')), file = join(dir, 'memory.sqlite');
   let store = new MeetingStore(file);
   try {
@@ -107,7 +109,7 @@ test('create, retry, failed writes and restart keep one meeting and one index pe
     assert.equal(store.chunks(meeting.id).length, 0);
     failEmbedding = false; service.start(meeting.id); await service.jobs.get(meeting.id);
     const ready = store.get(meeting.id), chunks = store.chunks(meeting.id);
-    assert.equal(ready.attempts, 2); assert.equal(chunks.length, ready.passages.length);
+    assert.equal(ready.attempts, 2); assert.deepEqual(new Set(chunks.flatMap(c => c.sourceIds)), new Set(ready.passages.map(p => p.id)));
     service.start(meeting.id); assert.equal(service.jobs.size, 0); // ready processing is idempotent
     assert.throws(() => store.complete(meeting.id, organization(ready), [chunks[0], chunks[0]], provider.models));
     assert.equal(store.chunks(meeting.id).length, chunks.length); // transaction rollback retained index

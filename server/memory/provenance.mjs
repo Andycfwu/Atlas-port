@@ -15,7 +15,8 @@ export function validateProvenance(input, original) {
     ids.add(s.id);
     const confirmation = s.nameConfirmation ?? null;
     if (confirmation !== null && (!shortText(confirmation.name) || typeof confirmation.confirmedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(confirmation.confirmedAt) || !Number.isFinite(Date.parse(confirmation.confirmedAt)))) invalid();
-    return { id: s.id, label: s.label, nameConfirmation: confirmation && { name: confirmation.name, confirmedAt: confirmation.confirmedAt } };
+    if (s.providerLabel !== undefined && !shortText(s.providerLabel)) invalid();
+    return { ...(s.providerLabel !== undefined ? { providerLabel: s.providerLabel } : {}), id: s.id, label: s.label, nameConfirmation: confirmation && { name: confirmation.name, confirmedAt: confirmation.confirmedAt } };
   });
   const segmentIds = new Set();
   const cleanSegments = segments.map(s => {
@@ -34,7 +35,10 @@ export function validateProvenance(input, original) {
       const text = original.slice(s.start, s.end).trim();
       if ((s.start > 0 && !/[\r\n]/.test(original[s.start - 1])) || !labelPattern(speaker.label).test(text) || /[\r\n]/.test(text)) invalid();
     }
-    return { id: s.id, start: s.start, end: s.end, speakerId, attribution, audio: audio && { recordingId: audio.recordingId, startMs: audio.startMs, endMs: audio.endMs, timingSource: audio.timingSource } };
+    if (s.attributionStatus !== undefined && !['speaker', 'unknown', 'overlap'].includes(s.attributionStatus)) invalid();
+    if (s.providerOverlap !== undefined && s.providerOverlap !== null && typeof s.providerOverlap !== 'boolean') invalid();
+    if (s.providerSpeaker !== undefined && s.providerSpeaker !== null && (typeof s.providerSpeaker !== 'string' || s.providerSpeaker.length > 100)) invalid();
+    return { ...(s.attributionStatus !== undefined ? { attributionStatus: s.attributionStatus, providerSpeaker: s.providerSpeaker ?? null, providerOverlap: s.providerOverlap ?? null } : {}), id: s.id, start: s.start, end: s.end, speakerId, attribution, audio: audio && { recordingId: audio.recordingId, startMs: audio.startMs, endMs: audio.endMs, timingSource: audio.timingSource } };
   });
   // Different speech segments cannot silently assign the same text to different voices.
   const sorted = [...cleanSegments].sort((a, b) => a.start - b.start);
@@ -59,6 +63,7 @@ export function supportsSpeaker(source, quote, name, segmentId = null) {
     const excerpt = source.text.slice(Math.max(0, segment.start - source.start), Math.min(source.text.length, segment.end - source.start));
     return excerpt.includes(quote);
   }
+  if (source.transcriptSource?.kind === 'diarized_audio') return false;
   return source.text.split(/\r?\n/).some((line, index) => {
     if (index === 0 && source.start > 0 && source.startsAtLineBoundary !== true) return false;
     return labelPattern(name).test(line.trimStart()) && line.includes(quote) && labelPattern(name).test(quote.trimStart());

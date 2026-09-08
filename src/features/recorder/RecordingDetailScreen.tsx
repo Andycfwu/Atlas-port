@@ -1,3 +1,5 @@
+import { DiarizationPanel } from './diarization/DiarizationPanel';
+import type { DiarizedTranscript } from './diarization/diarization.types';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -28,7 +30,7 @@ import { useRecordingPlayer } from './playback';
 interface RecordingDetailScreenProps {
   onBack: () => void;
   onDeleted: () => void;
-  onMeetingMemory: (recording: SavedRecording) => void;
+  onMeetingMemory: (recording: SavedRecording, diarized?: DiarizedTranscript) => void;
   recordingId: string;
 }
 
@@ -43,6 +45,7 @@ export function RecordingDetailScreen({
     recordings,
     renameRecording,
     transcribeRecording,
+    persistDiarization,
   } = useRecorder();
   const {
     activeRecordingId,
@@ -187,6 +190,7 @@ export function RecordingDetailScreen({
     <Screen>
       <ScrollView
         alwaysBounceVertical={false}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
@@ -314,6 +318,8 @@ export function RecordingDetailScreen({
             />
           </View>
         </View>
+
+        <View style={{ marginTop: 20 }}><DiarizationPanel recording={recording} onPersist={persistDiarization} onUse={version => { void pause(); onMeetingMemory(recording, version); }} /></View>
 
         <RecordingTranscript
           onTranscribe={force => transcribeRecording(recording.id, force)}

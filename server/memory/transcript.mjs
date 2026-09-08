@@ -24,11 +24,12 @@ export function validateIntake(input) {
   let transcriptSource;
   if (input.transcriptSource !== undefined) {
     const source = input.transcriptSource;
-    if (!source || !['live', 'saved_audio'].includes(source.kind)
+    if (!source || !['live', 'saved_audio', 'diarized_audio'].includes(source.kind)
       || typeof source.recordingId !== 'string' || !source.recordingId.trim() || source.recordingId.length > 200
       || !['completed', 'paused', 'failed', 'finishing'].includes(source.status)
       || [source.traceId, source.model].some(v => v !== null && (typeof v !== 'string' || !v.trim() || v.length > 200))) throw new MemoryError('Invalid recording transcript provenance.');
-    transcriptSource = { kind: source.kind, recordingId: source.recordingId, traceId: source.traceId, model: source.model, status: source.status };
+    if (source.kind === 'diarized_audio' && (!/^[a-f0-9]{64}$/.test(source.diarizationId) || !/^[a-f0-9]{64}$/.test(source.namesKey))) throw new MemoryError('Invalid diarized source version.');
+    transcriptSource = { ...(source.kind === 'diarized_audio' ? { diarizationId: source.diarizationId, namesKey: source.namesKey } : {}), kind: source.kind, recordingId: source.recordingId, traceId: source.traceId, model: source.model, status: source.status };
   }
   let provenance;
   try { provenance = validateProvenance(input, originalTranscript); }
@@ -82,8 +83,16 @@ export function validateOrganization(result, passages, meeting = {}) {
   if (!result || !Array.isArray(result.cleanedPassages) || result.cleanedPassages.length !== passages.length || !Array.isArray(result.topics) || result.topics.length > 40) invalid();
   const seen = new Set();
   for (const p of result.cleanedPassages) {
-    if (!originals.has(p.passageId) || seen.has(p.passageId) || !nonempty(p.text) || typeof p.smallTalk !== 'boolean') invalid();
+    if (!originals.has(p.passageId) || seen.has(p.passageId) || (!nonempty(p.text) && p.text !== originals.get(p.passageId)) || typeof p.smallTalk !== 'boolean') invalid();
     seen.add(p.passageId);
+    // A colon can be ordinary edited punctuation ("Harbor Court lot B-17:").
+    // Only check actual identity/timing markers here. Attendance is used solely to
+    // reject newly invented name labels, never to establish a speaker's identity.
+    const names = [...(meeting.participants ?? []), ...(meeting.speakers ?? []).flatMap(s => [s.label, s.nameConfirmation?.name].filter(Boolean))];
+    const markers = p.text.match(/(?:^|\n)\s*(?:Speaker \d+|Unknown speaker|Unlabeled speaker)\s*:/gi) ?? [];
+    markers.push(...(p.text.match(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g) ?? []));
+    for (const line of p.text.split(/\r?\n/)) for (const name of names) if (line.trimStart().toLowerCase().startsWith(`${name.toLowerCase()}:`)) markers.push(line.trimStart().slice(0, name.length + 1));
+    for (const marker of markers) if (!originals.get(p.passageId).includes(marker.trimStart())) invalid();
     // Digits in supplied labels, dates, costs and identifiers must survive cleanup verbatim.
     if (numericTokens(originals.get(p.passageId)).some(n => !numericTokens(p.text).includes(n))) throw new MemoryError('The cleaned version changed or omitted a number or timestamp. The original is preserved; retry processing.', 502, 'MEMORY_NUMERIC_FIDELITY');
   }

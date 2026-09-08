@@ -1,7 +1,7 @@
 import { appConfig } from '../../config/app.config';
 import { ApiError, createApiClient } from '../../services/api';
 import type { ApiClient } from '../../services/api';
-import type { Meeting, MeetingFilters, MeetingIntake, MeetingSummary, MemoryAnswer } from './memory.types';
+import type { Meeting, MeetingFilters, MeetingIntake, MeetingSummary, MemoryAnswer, SpeakerNameInput } from './memory.types';
 
 export function createMeetingMemoryService(client?: ApiClient) {
   async function request<T, B = never>(path: string, body?: B): Promise<T> {
@@ -25,6 +25,7 @@ export function createMeetingMemoryService(client?: ApiClient) {
     list: () => request<{ mode: string; meetings: MeetingSummary[] }>('/meetings'),
     get: (id: string) => request<Meeting>(`/meetings/${encodeURIComponent(id)}`),
     create: (input: MeetingIntake) => request<{ meeting: Meeting; existing: boolean }, MeetingIntake>('/meetings', input),
+    reviseSpeakers: (id: string, speakerNames: SpeakerNameInput[]) => request<{ meeting: Meeting; existing: boolean }, { speakerNames: SpeakerNameInput[] }>(`/meetings/${encodeURIComponent(id)}/speakers`, { speakerNames }),
     process: (id: string, reprocess = false) => request<Meeting, { reprocess: boolean }>(`/meetings/${encodeURIComponent(id)}/process`, { reprocess }),
     ask: (question: string, filters: MeetingFilters) => request<MemoryAnswer, { question: string; filters: MeetingFilters }>('/questions', { question, filters }),
     answers: () => request<MemoryAnswer[]>('/answers'),

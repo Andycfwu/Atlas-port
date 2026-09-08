@@ -141,3 +141,21 @@ test('legacy transcript is retained with unknown provenance when retranscribing,
   assert.equal(retry.postTranscripts[0].model, null);
   assert.equal(retry.postTranscripts[0].savedAt, null);
 });
+
+test('diarization save/reopen and retry cannot overwrite live, post, audio or existing diarized versions', async () => {
+  const { storage, recording, files } = await savedFixture();
+  await storage.updateRecordingTranscription(recording.id, 'transcribing', null, 'post');
+  await storage.updateRecordingTranscription(recording.id, 'complete', 'Previous post text', 'post');
+  const result = { id: 'diarized-v1', recordingId: recording.id, originalTranscript: 'Separate diarized text', speakers: [], segments: [] };
+  await storage.saveDiarizationJob(recording.id, { id: result.id, recordingId: recording.id, status: 'ready', error: null, result });
+  await storage.saveDiarizationJob(recording.id, { id: result.id, recordingId: recording.id, status: 'ready', error: null, result });
+  await storage.saveDiarizationJob(recording.id, { id: null, recordingId: recording.id, status: 'uploading', error: null });
+  const [reopened] = await storage.loadRecordings();
+  assert.equal(reopened.diarization.status, 'failed');
+  assert.equal(reopened.diarizedTranscripts.length, 1);
+  assert.deepEqual(reopened.diarizedTranscripts[0], result);
+  assert.deepEqual(reopened.liveTranscript, liveSource);
+  assert.equal(reopened.transcript, 'Previous post text');
+  assert.ok(files.has(recording.uri));
+  await assert.rejects(storage.saveDiarizationJob(recording.id, { id: result.id, recordingId: 'wrong', status: 'ready', result }), /does not match/);
+});

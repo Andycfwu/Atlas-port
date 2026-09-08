@@ -1,3 +1,4 @@
+import type { DiarizationJob, DiarizedTranscript } from './diarization/diarization.types';
 import type { TranscriptionFailureDetails } from './recording-transcription.types';
 
 export type TranscriptionStatus =
@@ -20,6 +21,8 @@ export interface SavedRecording {
   /** Historical recordings have no saved live source. Never infer it from post text. */
   liveTranscript?: SavedLiveTranscript | null;
   postTranscripts?: SavedPostTranscript[];
+  diarization?: Omit<DiarizationJob, 'result'>;
+  diarizedTranscripts?: DiarizedTranscript[];
 }
 
 export interface LiveTranscriptSegment { itemId: string; deltaText: string; finalText: string | null }

@@ -1,3 +1,5 @@
+import { DiarizationService, openAIDiarizationProvider } from './diarization/service.mjs';
+import { createDiarizationRouter } from './diarization/router.mjs';
 import { uploadSizeMatches, originalTranscriptionText } from './transcription-integrity.mjs';
 import { createReadStream } from 'node:fs';
 import { createServer } from 'node:http';
@@ -105,7 +107,9 @@ app.get('/health', (_request, response) => {
 
 const meetingStore = new MeetingStore(process.env.MEMORY_DB_PATH || fileURLToPath(new URL('./data/meeting-memory.sqlite', import.meta.url)));
 const meetingMemory = new MeetingMemoryService(meetingStore, createMemoryProvider(openai));
-app.use('/v1/memory', createMemoryRouter(meetingMemory));
+const diarization = new DiarizationService(meetingStore.db, openAIDiarizationProvider(openai));
+app.use('/v1/diarizations', createDiarizationRouter(diarization));
+app.use('/v1/memory', createMemoryRouter(meetingMemory, diarization));
 
 app.use('/transcribe', (request, response, next) => {
   const trace = getTraceContext(request);

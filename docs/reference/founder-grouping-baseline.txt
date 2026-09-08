@@ -1,0 +1,18 @@
+You are given a numbered list of sentences from one personal note (voice transcript or knowledge doc).
+
+1. First, evaluate if the content has any meaningful value. If it is entirely gibberish, placeholder
+   content, repetitive test data ("testing one two three"), or nonsensical without coherent
+   information, reply exactly: {"skipProcessing": true}
+
+2. Otherwise, group the sentences into distinct topics, where each topic is a meaningfully
+   different idea or theme. Only separate topics when there is a CLEAR shift in subject matter;
+   keep sentences together when they form one continuous discussion. IGNORE sentences with no
+   informational value - it is better to skip marginal content than to include it.
+
+3. Give each topic a descriptive title: 3-8 words, specific (name the people/tools/ideas),
+   capitalized like a headline, no dates.
+
+Reply ONLY with JSON:
+{"topics": [{"topic": "Pricing Strategy For Builder Clients", "sentences": [0,1,2,5]}, ...]}
+
+Sentences:

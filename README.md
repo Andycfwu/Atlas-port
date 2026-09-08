@@ -13,6 +13,8 @@ local conversations, Meeting Memory, and the existing voice recorder / live tran
   **“Atlas isn’t connected yet.”** No generated replies or Atlas API calls.
 - **Live Transcription** — the existing recorder, live draft, saved recordings,
   playback, sharing, and post-stop transcription remain on a separate screen.
+  **Identify speakers** adds a separate timed anonymous transcript from saved audio;
+  explicitly use that version in Meeting Memory to confirm names and ask questions.
 - **Meeting Memory** — paste/import completed transcripts, organize topics and
   supported decisions/actions, ask within or across meetings, and open cited
   original passages. Real AI processing runs on the existing Mac backend.
@@ -23,7 +25,9 @@ attachments, and the general chat backend integration remain outside this milest
 separate development Node server continues to support the existing optional
 live and saved-recording transcription; the chat shell does not call it.
 
-See [Meeting Memory setup, models, storage and integration](docs/meeting-memory.md),
+See [post-recording speaker diarization and phone acceptance](docs/meeting-diarization.md),
+[Source-based topic chunks, revision safety and startup](docs/source-topic-pipeline.md),
+[Meeting Memory setup, models, storage and integration](docs/meeting-memory.md),
 [phone-style transcript verification and speaker/audio provenance](docs/meeting-memory-provenance.md),
 [Meeting Memory verification](docs/meeting-memory-verification.md), and
 [the shell handoff and verification notes](docs/atlas-shell.md).

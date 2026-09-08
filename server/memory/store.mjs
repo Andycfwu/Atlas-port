@@ -1,3 +1,4 @@
+import { MemoryVersions } from './versions.mjs';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -20,9 +21,11 @@ export class MeetingStore {
         meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
         passage_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(meeting_id, passage_id)
       );
+      CREATE TABLE IF NOT EXISTS diarized_selections (source_id TEXT PRIMARY KEY, meeting_id TEXT NOT NULL REFERENCES meetings(id));
       CREATE TABLE IF NOT EXISTS answers (
         id TEXT PRIMARY KEY, user_id TEXT NOT NULL, payload TEXT NOT NULL
       );`);
+    this.versions = new MemoryVersions(this, filename);
     // A crashed worker must not leave a meeting permanently spinning. Originals remain intact.
     for (const meeting of this.list()) {
       if (meeting.status === 'processing') this.update(meeting.id, { status: 'failed', stage: 'interrupted', error: 'Processing was interrupted by a backend restart. Retry to rebuild this meeting’s index.' });
@@ -38,13 +41,26 @@ export class MeetingStore {
     if (existing) {
       const meeting = JSON.parse(existing.payload);
       if (meeting.fingerprint !== fingerprint) throw new MemoryError('This source was already imported with different content or details.', 409, 'MEMORY_SOURCE_CONFLICT');
-      if (JSON.stringify([meeting.speakers ?? [], meeting.segments ?? []]) !== JSON.stringify([data.speakers, data.segments])) throw new MemoryError('This transcript is already saved with different speaker or audio evidence. Existing provenance was preserved; importing cannot overwrite it.', 409, 'MEMORY_PROVENANCE_CONFLICT');
+      if (meeting.originalTranscript !== data.originalTranscript) throw new MemoryError('This original import is preserved as a historical revision, but the meeting now uses a newer source. Open the existing meeting or its exact historical revision.', 409, 'MEMORY_SOURCE_SUPERSEDED');
+      const comparableSpeakers = speakers => (speakers ?? []).map(s => data.transcriptSource?.kind === 'diarized_audio' ? { ...s, nameConfirmation: s.nameConfirmation ? { name: s.nameConfirmation.name } : null } : s);
+      if (JSON.stringify([comparableSpeakers(meeting.speakers), meeting.segments ?? []]) !== JSON.stringify([comparableSpeakers(data.speakers), data.segments])) throw new MemoryError('This transcript is already saved with different speaker or audio evidence. Existing provenance was preserved; importing cannot overwrite it.', 409, 'MEMORY_PROVENANCE_CONFLICT');
       return { meeting, existing: true };
     }
     const now = new Date().toISOString();
     const meeting = { id: randomUUID(), ...data, fingerprint, passages: splitPassages(data.originalTranscript), status: 'draft', stage: 'saved', error: null, topics: [], cleanedPassages: [], models: null, attempts: 0, createdAt: now, updatedAt: now };
     this.db.prepare('INSERT INTO meetings VALUES (?, ?, ?, ?, ?)').run(meeting.id, DEVELOPMENT_USER, fingerprint, data.sourceKey, JSON.stringify(meeting));
-    return { meeting, existing: false };
+    return { meeting: this.versions.ensure(meeting), existing: false };
+  }
+  selectDiarized(meeting) {
+    const source = meeting.transcriptSource;
+    if (source?.kind === 'diarized_audio') this.db.prepare('INSERT OR REPLACE INTO diarized_selections VALUES (?, ?)').run(source.diarizationId, meeting.id);
+    return meeting;
+  }
+  questionMeetings(filters) {
+    const meetings = this.list();
+    if (filters.meetingIds.length) return meetings; // Explicit historical source selection remains supported.
+    const selected = new Map(this.db.prepare('SELECT * FROM diarized_selections').all().map(row => [row.source_id, row.meeting_id]));
+    return meetings.filter(m => m.transcriptSource?.kind !== 'diarized_audio' || !selected.has(m.transcriptSource.diarizationId) || selected.get(m.transcriptSource.diarizationId) === m.id);
   }
   get(id) {
     const row = this.db.prepare('SELECT payload FROM meetings WHERE id=? AND user_id=?').get(id, DEVELOPMENT_USER);
@@ -71,7 +87,8 @@ export class MeetingStore {
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
   chunks(id) {
-    this.get(id);
+    const meeting = this.get(id);
+    if (meeting.publishedGenerationId) return this.versions.chunks(id);
     return this.db.prepare('SELECT payload FROM chunks WHERE meeting_id=? ORDER BY passage_id').all(id).map(row => JSON.parse(row.payload));
   }
   saveAnswer(answer) {

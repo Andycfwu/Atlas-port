@@ -1,3 +1,4 @@
+import type { DiarizationJob } from './diarization/diarization.types';
 import {
   createContext,
   type PropsWithChildren,
@@ -59,6 +60,7 @@ import {
   removePersistedRecordingSource,
   renameRecording as renameStoredRecording,
   saveRecordingMetadata,
+  saveDiarizationJob,
   updateRecordingTranscription,
 } from './recorder.storage';
 import { savedLiveSource } from './recorder.transcripts';
@@ -71,6 +73,7 @@ import type {
 } from './recorder.types';
 
 interface RecorderContextValue {
+  persistDiarization: (recordingId: string, job: DiarizationJob) => Promise<void>;
   clearError: () => void;
   deleteRecording: (recordingId: string) => Promise<void>;
   durationMillis: number;
@@ -674,6 +677,8 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       ),
     );
   }, []);
+
+  const persistDiarization = useCallback(async (id: string, job: DiarizationJob) => { replaceRecording(await saveDiarizationJob(id, job)); }, [replaceRecording]);
 
   const transcribeSavedRecording = useCallback(
     async (recording: SavedRecording, force = false): Promise<boolean> => {
@@ -1420,6 +1425,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       startRecording,
       stopRecording,
       transcribeRecording,
+      persistDiarization,
     }),
     [
       deleteRecording,
@@ -1443,6 +1449,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       startRecording,
       stopRecording,
       transcribeRecording,
+      persistDiarization,
     ],
   );
 

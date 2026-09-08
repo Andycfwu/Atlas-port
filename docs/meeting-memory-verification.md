@@ -165,3 +165,13 @@ adds separate persisted live/post sources and direct Recording Detail intake.
 Its automated suite passes 95 tests. New physical multi-person acceptance and
 retranscription of an affected historical recording are still pending. Earlier
 structured/messy real-model checks are not evidence of this phone behavior.
+
+## Source-topic pipeline milestone (8 September 2026)
+
+The latest [source-pipeline handoff](source-topic-pipeline.md#verification-performed)
+records the 119-test full pass plus a 14-test focused pipeline pass (120 distinct
+passing tests), passing TypeScript/lint, additive migration,
+and separate real-provider results for the founder fixture, structured transcripts
+and both messy forms. It includes the initial flat-text validation defect, its fix,
+and targeted passing recheck. Phone verification remains pending; earlier simulator
+or physical-device results do not verify these new topic-chunk screens.

@@ -114,7 +114,12 @@ The earlier user-reported Expo Go checks verified complete playback and navigati
 during recording. This extension did not repeat those device tests or test new
 recordings, locking, background behavior, segment alignment or diarization.
 
-## What future diarization would require
+## Original diarization plan (implemented in the subsequent milestone)
+
+The [post-recording diarization milestone](meeting-diarization.md) now implements
+separate audio-derived labels/times, meeting name confirmation and source versions.
+The inspection table above describes the pre-diarization implementation; see the
+new handoff for current availability, validation and remaining limitations.
 
 1. Use the preserved completed M4A and its stable recording/installation identity.
    Do not replace it with the provisional live draft or rewrite existing files.

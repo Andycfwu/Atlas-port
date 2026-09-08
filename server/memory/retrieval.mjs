@@ -27,30 +27,49 @@ export function matchesFilters(meeting, filters) {
     && (!filters.dateFrom || meeting.date >= filters.dateFrom) && (!filters.dateTo || meeting.date <= filters.dateTo);
 }
 
-// Hybrid scoring is over original contextual passages. Topic links expand recurrent
-// discussion before answering, so a later correction can accompany an earlier estimate.
+// Rank source-assembled chunks; admit whole chunks to the evidence budget. Related
+// parts precede adjacent context. No partially truncated chunk is passed as complete.
 export function retrieve(meetings, chunksFor, query, vector, filters) {
-  const eligible = meetings.filter(m => m.status === 'ready' && matchesFilters(m, filters));
+  const eligible = meetings.filter(m => (m.publishedGenerationId || m.status === 'ready') && matchesFilters(m, filters));
   const scored = eligible.flatMap(meeting => chunksFor(meeting.id).map(chunk => ({
-    meeting, chunk, score: Math.max(0, cosine(vector, chunk.embedding)) + 1.4 * lexicalScore(query, chunk.text),
+    meeting, chunk, score: Math.max(0, cosine(vector, chunk.embedding)) + 1.4 * lexicalScore(query, `${chunk.title ?? ''} ${chunk.text}`),
   }))).sort((a, b) => b.score - a.score || a.meeting.id.localeCompare(b.meeting.id) || a.chunk.passageId.localeCompare(b.chunk.passageId));
   const seeds = scored.filter(row => row.score >= 0.23).slice(0, 6);
-  const selected = new Map();
-  const add = (meeting, id) => {
+  const selected = new Map(), selectedChunks = new Map(); let size = 0, truncated = false;
+  const source = (meeting, id) => {
     const passage = meeting.passages.find(p => p.id === id);
-    if (passage) selected.set(`${meeting.id}/${id}`, { meetingId: meeting.id, meetingTitle: meeting.title, date: meeting.date, participants: meeting.participants, passageId: id, start: passage.start, end: passage.end, text: passage.text, startsAtLineBoundary: passage.start === 0 || /[\r\n]/.test(meeting.originalTranscript[passage.start - 1]), ...passageProvenance(meeting, passage), ...(meeting.transcriptSource ? { transcriptSource: meeting.transcriptSource } : {}) });
+    return passage && { meetingId: meeting.id, meetingTitle: meeting.title, date: meeting.date, participants: meeting.participants, passageId: id, revisionId: meeting.revisionId, generationId: meeting.publishedGenerationId, start: passage.start, end: passage.end, text: passage.text, startsAtLineBoundary: passage.start === 0 || /[\r\n]/.test(meeting.originalTranscript[passage.start - 1]), ...passageProvenance(meeting, passage), ...(meeting.transcriptSource ? { transcriptSource: meeting.transcriptSource } : {}) };
   };
-  // Add ALL linked topic passages first, ahead of neighbor context, up to the source budget.
+  const add = (meeting, ids, chunk) => {
+    const rows = ids.filter(id => !selected.has(`${meeting.id}/${id}`)).map(id => source(meeting, id)).filter(Boolean);
+    const cost = Buffer.byteLength(JSON.stringify(rows.map(({ revisionId, generationId, meetingTitle, date, participants, transcriptSource, ...evidence }) => evidence)), 'utf8');
+    if (size + cost > 42_000) { truncated = true; return; }
+    for (const row of rows) selected.set(`${meeting.id}/${row.passageId}`, row);
+    size += cost;
+    if (chunk) selectedChunks.set(chunk.id ?? `${meeting.id}/${chunk.passageId}`, { ...chunk, embedding: undefined });
+  };
   for (const { meeting, chunk } of seeds) {
-    const topics = meeting.topics.filter(t => t.sourceIds.includes(chunk.passageId))
-      .map(t => ({ topic: t, score: lexicalScore(query, `${t.title} ${t.summary.text}`) }))
-      .sort((a, b) => b.score - a.score).slice(0, 2);
-    for (const { topic } of topics) for (const id of topic.sourceIds) add(meeting, id);
-    add(meeting, chunk.passageId);
+    if (chunk.sourceIds) {
+      add(meeting, chunk.sourceIds, chunk);
+      for (const related of scored.filter(r => r.meeting.id === meeting.id && r.chunk.topicId === chunk.topicId && r.chunk.id !== chunk.id).sort((a, b) => a.chunk.part - b.chunk.part)) add(meeting, related.chunk.sourceIds, related.chunk);
+    } else { // Read-only legacy generation migration: retain its original retrieval links.
+      const topics = meeting.topics.filter(t => t.sourceIds.includes(chunk.passageId)).sort((a, b) => lexicalScore(query, b.title) - lexicalScore(query, a.title)).slice(0, 2);
+      for (const topic of topics) add(meeting, topic.sourceIds);
+      add(meeting, chunk.contextSourceIds ?? [chunk.passageId], chunk);
+    }
   }
-  for (const { meeting, chunk } of seeds) for (const id of chunk.contextSourceIds) add(meeting, id);
-  const all = [...selected.values()];
-  return { sources: all.slice(0, 72), truncated: all.length > 72, eligibleMeetings: eligible.length };
+  // Omitted text is still searchable verbatim (e.g. an explicit weather question).
+  // It has no vector and does not enter unrelated topic chunks.
+  for (const meeting of eligible) for (const omission of meeting.omissions ?? []) {
+    const p = meeting.passages.find(p => p.id === omission.sourceId);
+    if (p && lexicalScore(query, p.text) >= 0.6) add(meeting, [p.id]);
+  }
+  const originals = [...selected.values()];
+  for (const row of originals) {
+    const meeting = eligible.find(m => m.id === row.meetingId), index = meeting.passages.findIndex(p => p.id === row.passageId);
+    add(meeting, meeting.passages.slice(Math.max(0, index - 1), index + 2).map(p => p.id));
+  }
+  return { sources: [...selected.values()], chunks: [...selectedChunks.values()], truncated, eligibleMeetings: eligible.length };
 }
 
 export function validateAnswer(answer, sources, question = '') {

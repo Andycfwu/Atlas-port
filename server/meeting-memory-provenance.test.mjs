@@ -1,3 +1,4 @@
+import { fixtureGrouping } from './memory/fixture-provider.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
@@ -13,6 +14,7 @@ const details = { title: 'SYNTHETIC provenance test', date: '2026-09-08', partic
 const answer = (source, speaker = null, quote = source.text) => ({ scope: speaker ? 'speaker' : 'meeting', requestedSpeaker: speaker, status: 'answered', clarification: null, limitation: null,
   statements: [{ kind: 'discussion', text: 'Deterministic contract assertion; not a model quality check.', citations: [{ meetingId: source.meetingId, passageId: source.passageId, quote, speaker, segmentId: null }] }] });
 const provider = {
+  group: fixtureGrouping, dimensions: 2,
   models: { organization: 'deterministic-double', embedding: 'test-vector', answer: 'deterministic-double' },
   organize: async m => ({ cleanedPassages: m.passages.map(p => ({ passageId: p.id, text: p.text, smallTalk: false })), topics: [{ title: 'Property allowance', summary: { text: 'Synthetic mechanical grouping only.', sourceIds: m.passages.map(p => p.id) }, items: [] }] }),
   embed: async texts => texts.map(() => [1, 0]),
@@ -31,7 +33,7 @@ for (const name of ['messy-unlabeled', 'messy-flat']) test(`${name}: original, m
     const m = store.create(input).meeting, service = new MeetingMemoryService(store, provider);
     service.start(m.id); await service.jobs.get(m.id);
     const result = retrieve(store.list(), id => store.chunks(id), name === 'messy-flat' ? 'B-17 allowance correction' : 'CL-204 drainage correction', [1, 0], validateFilters({ participant: 'Mike' }));
-    assert.ok(result.sources.some(s => s.passageId === passages[0].id));
+    assert.ok(result.sources.some(s => s.start === 0));
     assert.ok(result.sources.some(s => /\$26,500|\$17,800/.test(s.text)));
     for (const s of result.sources) {
       assert.equal(text.slice(s.start, s.end), s.text); assert.deepEqual(s.speakers, []); assert.deepEqual(s.segments, []);

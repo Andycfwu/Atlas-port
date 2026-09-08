@@ -1,0 +1,16 @@
+{
+  "label": "SYNTHETIC: recreated from founder handoff section 5; authored grouping, not model output",
+  "sentences": [
+    "Atlas should let people record meetings from their phones.",
+    "Each upload needs a stable recording ID so that a renamed meeting does not become a duplicate.",
+    "Testing one two three.",
+    "Our first pilot will include five project teams.",
+    "We will invite the teams on Monday and collect feedback on Friday.",
+    "The recording ID should also connect every retrieved chunk to its original audio."
+  ],
+  "groups": [
+    { "title": "Stable Identity For Atlas Recordings", "indexes": [0, 1, 5] },
+    { "title": "Five Team Pilot Schedule", "indexes": [3, 4] }
+  ],
+  "omittedIndexes": [2]
+}

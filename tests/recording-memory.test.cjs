@@ -31,3 +31,15 @@ test('absent/blank live text falls back to post source; partial live remains def
   assert.equal(intake.intakeFromRecording(partial, intake.recordingDraft(partial)).transcriptSource.status, 'paused');
   assert.throws(() => intake.recordingDraft({ ...recording, liveTranscript: null, transcript: null }), /No saved transcript/);
 });
+
+test('diarized selection is explicit, carries confirmed names separately and cannot label live text', () => {
+  const version = { id: 'diarized-version', recordingId: recording.id, originalTranscript: 'Original audio-derived segment text' };
+  const draft = intake.recordingDraft(recording, version);
+  const speakerNames = [{ speakerId: 'scoped-voice-1', name: 'Mike' }];
+  const request = intake.intakeFromDiarizedRecording(recording, version, draft, speakerNames);
+  assert.equal(request.diarizationId, version.id);
+  assert.deepEqual(request.speakerNames, speakerNames);
+  assert.equal(request.originalTranscript, version.originalTranscript);
+  assert.equal(intake.intakeFromRecording(recording, intake.recordingDraft(recording)).originalTranscript, recording.liveTranscript.text);
+  assert.throws(() => intake.intakeFromDiarizedRecording(recording, { ...version, recordingId: 'different' }, draft, speakerNames), /different recording/);
+});
