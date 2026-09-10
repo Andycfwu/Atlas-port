@@ -43,3 +43,16 @@ test('diarized selection is explicit, carries confirmed names separately and can
   assert.equal(intake.intakeFromRecording(recording, intake.recordingDraft(recording)).originalTranscript, recording.liveTranscript.text);
   assert.throws(() => intake.intakeFromDiarizedRecording(recording, { ...version, recordingId: 'different' }, draft, speakerNames), /different recording/);
 });
+
+test('Deepgram memory intake preserves full original, connection attribution and honest non-file timing', () => {
+  const version = { id: 'live-version', recorderSessionId: 'session', savedAt: '2026-09-10T00:00:00Z', status: 'completed', text: 'Quiet speaker agrees.', sessions: [{ connectionId: 'dg-one', configuration: { model: 'nova-3', configurationVersion: 'atlas-deepgram-live-v1' } }], finalResults: [{ id: 'dg-one:r0', connectionId: 'dg-one', text: 'Quiet speaker agrees.', words: [{ text: 'Quiet', startMs: 0, endMs: 100, providerSpeaker: 2 }, { text: 'speaker', startMs: 100, endMs: 200, providerSpeaker: 2 }, { text: 'agrees.', startMs: 200, endMs: 300, providerSpeaker: 2 }] }] };
+  const r = { ...recording, liveSpeakerTranscripts: [version] };
+  const data = intake.intakeFromLiveSpeakers(r, version, intake.recordingDraft(recording));
+  assert.equal(data.originalTranscript, version.text); assert.equal(data.segments.length, 1);
+  assert.equal(data.originalTranscript.slice(data.segments[0].start, data.segments[0].end), version.text);
+  assert.equal(data.segments[0].audio, null); assert.equal(data.segments[0].providerStream.endMs, 300);
+  assert.equal(data.speakers[0].label, 'Speaker 3'); assert.equal(data.speakers[0].nameConfirmation, null);
+  assert.equal(data.transcriptSource.recordingId, recording.id);
+  const incompleteWords = structuredClone(version); incompleteWords.finalResults[0].words.pop();
+  assert.equal(intake.intakeFromLiveSpeakers({ ...r, liveSpeakerTranscripts: [incompleteWords] }, incompleteWords, intake.recordingDraft(recording)).segments.length, 0);
+});

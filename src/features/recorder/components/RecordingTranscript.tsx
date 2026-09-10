@@ -12,6 +12,7 @@ import {
 import { colors } from '../../../config/theme';
 import { postSources } from '../recorder.transcripts';
 import type { SavedRecording } from '../recorder.types';
+import { SavedLiveSpeakerPanels } from '../live-speakers/LiveSpeakerPanel';
 
 interface RecordingTranscriptProps {
   onTranscribe: (force?: boolean) => Promise<boolean>;
@@ -75,7 +76,7 @@ export function RecordingTranscript({
         : 'READY';
 
   return (
-    <><View style={styles.card}>
+    <><SavedLiveSpeakerPanels versions={recording.liveSpeakerTranscripts} /><View style={styles.card}>
       <Text style={styles.eyebrow}>SAVED LIVE TRANSCRIPT</Text>
       <Text style={styles.emptyBody}>{recording.liveTranscript
         ? `Captured during recording · ${recording.liveTranscript.model} · ${recording.liveTranscript.status}`

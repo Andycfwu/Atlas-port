@@ -1,0 +1,2047 @@
+{
+  "performedAt": "2026-09-10T20:59:20.774Z",
+  "rows": [
+    {
+      "name": "improved",
+      "endpointing": 300,
+      "upstreamCalls": 1,
+      "durationMs": 19256.458333333332,
+      "failure": null,
+      "firstTextMs": 1145,
+      "finalResults": 7,
+      "uniqueFinalIds": 7,
+      "provisionalResults": 0,
+      "missingScriptKeywords": [
+        "stop"
+      ],
+      "speakerNumbers": [
+        0,
+        1
+      ],
+      "referenceStatus": "TTS script; pronunciation and overlap require human listening review",
+      "providerEvents": [
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 1,
+          "start": 0,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Cedar House in",
+                "confidence": 0.98291016,
+                "words": [
+                  {
+                    "word": "cedar",
+                    "start": 0,
+                    "end": 0.48,
+                    "confidence": 0.9013672,
+                    "speaker": 0,
+                    "punctuated_word": "Cedar"
+                  },
+                  {
+                    "word": "house",
+                    "start": 0.48,
+                    "end": 0.71999997,
+                    "confidence": 0.9838867,
+                    "speaker": 0,
+                    "punctuated_word": "House"
+                  },
+                  {
+                    "word": "in",
+                    "start": 0.71999997,
+                    "end": 0.88,
+                    "confidence": 0.98291016,
+                    "speaker": 0,
+                    "punctuated_word": "in"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 2,
+          "start": 0,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "The Cedar House inspection is Tuesday.",
+                "confidence": 0.9790039,
+                "words": [
+                  {
+                    "word": "the",
+                    "start": 0,
+                    "end": 0.16,
+                    "confidence": 0.6616211,
+                    "speaker": 0,
+                    "punctuated_word": "The"
+                  },
+                  {
+                    "word": "cedar",
+                    "start": 0.16,
+                    "end": 0.48,
+                    "confidence": 0.9790039,
+                    "speaker": 0,
+                    "punctuated_word": "Cedar"
+                  },
+                  {
+                    "word": "house",
+                    "start": 0.48,
+                    "end": 0.71999997,
+                    "confidence": 0.88671875,
+                    "speaker": 0,
+                    "punctuated_word": "House"
+                  },
+                  {
+                    "word": "inspection",
+                    "start": 0.71999997,
+                    "end": 1.1999999,
+                    "confidence": 0.9790039,
+                    "speaker": 0,
+                    "punctuated_word": "inspection"
+                  },
+                  {
+                    "word": "is",
+                    "start": 1.1999999,
+                    "end": 1.4399999,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "is"
+                  },
+                  {
+                    "word": "tuesday",
+                    "start": 1.4399999,
+                    "end": 1.8399999,
+                    "confidence": 0.8823242,
+                    "speaker": 0,
+                    "punctuated_word": "Tuesday."
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 2.48,
+          "start": 0,
+          "is_final": true,
+          "speech_final": true,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "The Cedar House inspection is Tuesday.",
+                "confidence": 0.97998047,
+                "words": [
+                  {
+                    "word": "the",
+                    "start": 0,
+                    "end": 0.16,
+                    "confidence": 0.5488281,
+                    "speaker": 0,
+                    "punctuated_word": "The"
+                  },
+                  {
+                    "word": "cedar",
+                    "start": 0.16,
+                    "end": 0.48,
+                    "confidence": 0.97998047,
+                    "speaker": 0,
+                    "punctuated_word": "Cedar"
+                  },
+                  {
+                    "word": "house",
+                    "start": 0.48,
+                    "end": 0.71999997,
+                    "confidence": 0.8925781,
+                    "speaker": 0,
+                    "punctuated_word": "House"
+                  },
+                  {
+                    "word": "inspection",
+                    "start": 0.71999997,
+                    "end": 1.1999999,
+                    "confidence": 0.9770508,
+                    "speaker": 0,
+                    "punctuated_word": "inspection"
+                  },
+                  {
+                    "word": "is",
+                    "start": 1.1999999,
+                    "end": 1.52,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "is"
+                  },
+                  {
+                    "word": "tuesday",
+                    "start": 1.52,
+                    "end": 1.92,
+                    "confidence": 0.9890137,
+                    "speaker": 0,
+                    "punctuated_word": "Tuesday."
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 1.02,
+          "start": 2.48,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Yes. The",
+                "confidence": 0.99902344,
+                "words": [
+                  {
+                    "word": "yes",
+                    "start": 2.48,
+                    "end": 3.2,
+                    "confidence": 0.99560547,
+                    "speaker": 0,
+                    "punctuated_word": "Yes."
+                  },
+                  {
+                    "word": "the",
+                    "start": 3.2,
+                    "end": 3.44,
+                    "confidence": 0.99902344,
+                    "speaker": 0,
+                    "punctuated_word": "The"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 2.02,
+          "start": 2.48,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Yes. The repair budget is",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "yes",
+                    "start": 2.48,
+                    "end": 3.28,
+                    "confidence": 0.99902344,
+                    "speaker": 0,
+                    "punctuated_word": "Yes."
+                  },
+                  {
+                    "word": "the",
+                    "start": 3.28,
+                    "end": 3.52,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "The"
+                  },
+                  {
+                    "word": "repair",
+                    "start": 3.52,
+                    "end": 3.92,
+                    "confidence": 0.9980469,
+                    "speaker": 0,
+                    "punctuated_word": "repair"
+                  },
+                  {
+                    "word": "budget",
+                    "start": 3.92,
+                    "end": 4.24,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "budget"
+                  },
+                  {
+                    "word": "is",
+                    "start": 4.24,
+                    "end": 4.3199997,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "is"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 3.02,
+          "start": 2.48,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Yes. The repair budget is forty thousand",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "yes",
+                    "start": 2.48,
+                    "end": 3.28,
+                    "confidence": 0.9951172,
+                    "speaker": 0,
+                    "punctuated_word": "Yes."
+                  },
+                  {
+                    "word": "the",
+                    "start": 3.3600001,
+                    "end": 3.52,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "The"
+                  },
+                  {
+                    "word": "repair",
+                    "start": 3.52,
+                    "end": 3.92,
+                    "confidence": 0.99902344,
+                    "speaker": 0,
+                    "punctuated_word": "repair"
+                  },
+                  {
+                    "word": "budget",
+                    "start": 3.92,
+                    "end": 4.24,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "budget"
+                  },
+                  {
+                    "word": "is",
+                    "start": 4.24,
+                    "end": 4.48,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "is"
+                  },
+                  {
+                    "word": "forty",
+                    "start": 4.48,
+                    "end": 4.8,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "forty"
+                  },
+                  {
+                    "word": "thousand",
+                    "start": 4.8,
+                    "end": 5.12,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "thousand"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 3.7199998,
+          "start": 2.48,
+          "is_final": true,
+          "speech_final": true,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Yes. The repair budget is forty thousand dollars.",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "yes",
+                    "start": 2.48,
+                    "end": 3.28,
+                    "confidence": 0.9975586,
+                    "speaker": 1,
+                    "punctuated_word": "Yes."
+                  },
+                  {
+                    "word": "the",
+                    "start": 3.3600001,
+                    "end": 3.52,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "The"
+                  },
+                  {
+                    "word": "repair",
+                    "start": 3.52,
+                    "end": 3.92,
+                    "confidence": 0.99902344,
+                    "speaker": 1,
+                    "punctuated_word": "repair"
+                  },
+                  {
+                    "word": "budget",
+                    "start": 3.92,
+                    "end": 4.24,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "budget"
+                  },
+                  {
+                    "word": "is",
+                    "start": 4.24,
+                    "end": 4.48,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "is"
+                  },
+                  {
+                    "word": "forty",
+                    "start": 4.48,
+                    "end": 4.8,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "forty"
+                  },
+                  {
+                    "word": "thousand",
+                    "start": 4.8,
+                    "end": 5.2,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "thousand"
+                  },
+                  {
+                    "word": "dollars",
+                    "start": 5.2,
+                    "end": 5.6,
+                    "confidence": 0.9951172,
+                    "speaker": 1,
+                    "punctuated_word": "dollars."
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 1,
+          "start": 6.2,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Wait. The roof",
+                "confidence": 0.9265137,
+                "words": [
+                  {
+                    "word": "wait",
+                    "start": 6.2,
+                    "end": 6.8399997,
+                    "confidence": 0.9265137,
+                    "speaker": 1,
+                    "punctuated_word": "Wait."
+                  },
+                  {
+                    "word": "the",
+                    "start": 6.8399997,
+                    "end": 7.08,
+                    "confidence": 0.99902344,
+                    "speaker": 1,
+                    "punctuated_word": "The"
+                  },
+                  {
+                    "word": "roof",
+                    "start": 7.08,
+                    "end": 7.16,
+                    "confidence": 0.921875,
+                    "speaker": 1,
+                    "punctuated_word": "roof"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 2,
+          "start": 6.2,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Wait. The roof estimate is",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "wait",
+                    "start": 6.2,
+                    "end": 6.9199996,
+                    "confidence": 0.9897461,
+                    "speaker": 1,
+                    "punctuated_word": "Wait."
+                  },
+                  {
+                    "word": "the",
+                    "start": 6.9199996,
+                    "end": 7.08,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "The"
+                  },
+                  {
+                    "word": "roof",
+                    "start": 7.08,
+                    "end": 7.3199997,
+                    "confidence": 0.99902344,
+                    "speaker": 1,
+                    "punctuated_word": "roof"
+                  },
+                  {
+                    "word": "estimate",
+                    "start": 7.3199997,
+                    "end": 7.72,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "estimate"
+                  },
+                  {
+                    "word": "is",
+                    "start": 7.72,
+                    "end": 7.96,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "is"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 2.87,
+          "start": 6.2,
+          "is_final": true,
+          "speech_final": true,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Wait. The roof estimate is uncertain.",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "wait",
+                    "start": 6.2,
+                    "end": 6.9199996,
+                    "confidence": 0.9909668,
+                    "speaker": 0,
+                    "punctuated_word": "Wait."
+                  },
+                  {
+                    "word": "the",
+                    "start": 6.9199996,
+                    "end": 7.08,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "The"
+                  },
+                  {
+                    "word": "roof",
+                    "start": 7.08,
+                    "end": 7.3199997,
+                    "confidence": 0.99902344,
+                    "speaker": 0,
+                    "punctuated_word": "roof"
+                  },
+                  {
+                    "word": "estimate",
+                    "start": 7.3199997,
+                    "end": 7.7999997,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "estimate"
+                  },
+                  {
+                    "word": "is",
+                    "start": 7.7999997,
+                    "end": 8.04,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "is"
+                  },
+                  {
+                    "word": "uncertain",
+                    "start": 8.04,
+                    "end": 8.44,
+                    "confidence": 0.99609375,
+                    "speaker": 0,
+                    "punctuated_word": "uncertain."
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 1.0799999,
+          "start": 9.07,
+          "is_final": true,
+          "speech_final": true,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Okay.",
+                "confidence": 0.99902344,
+                "words": [
+                  {
+                    "word": "okay",
+                    "start": 9.15,
+                    "end": 9.549999,
+                    "confidence": 0.99902344,
+                    "speaker": 0,
+                    "punctuated_word": "Okay."
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 1.0500002,
+          "start": 10.15,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "",
+                "confidence": 0,
+                "words": []
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 2.0500002,
+          "start": 10.15,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "",
+                "confidence": 0,
+                "words": []
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 3.0500002,
+          "start": 10.15,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Please check",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "please",
+                    "start": 12.629999,
+                    "end": 12.95,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "Please"
+                  },
+                  {
+                    "word": "check",
+                    "start": 12.95,
+                    "end": 13.19,
+                    "confidence": 0.88134766,
+                    "speaker": 0,
+                    "punctuated_word": "check"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 4.05,
+          "start": 10.15,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Please check the drainage before",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "please",
+                    "start": 12.709999,
+                    "end": 13.03,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "Please"
+                  },
+                  {
+                    "word": "check",
+                    "start": 13.03,
+                    "end": 13.2699995,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "check"
+                  },
+                  {
+                    "word": "the",
+                    "start": 13.2699995,
+                    "end": 13.429999,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "the"
+                  },
+                  {
+                    "word": "drainage",
+                    "start": 13.429999,
+                    "end": 13.83,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "drainage"
+                  },
+                  {
+                    "word": "before",
+                    "start": 13.83,
+                    "end": 14.15,
+                    "confidence": 0.9707031,
+                    "speaker": 0,
+                    "punctuated_word": "before"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 4.88,
+          "start": 10.15,
+          "is_final": true,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Please check the drainage before we sign.",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "please",
+                    "start": 12.709999,
+                    "end": 13.03,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "Please"
+                  },
+                  {
+                    "word": "check",
+                    "start": 13.03,
+                    "end": 13.2699995,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "check"
+                  },
+                  {
+                    "word": "the",
+                    "start": 13.2699995,
+                    "end": 13.429999,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "the"
+                  },
+                  {
+                    "word": "drainage",
+                    "start": 13.429999,
+                    "end": 13.83,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "drainage"
+                  },
+                  {
+                    "word": "before",
+                    "start": 13.83,
+                    "end": 14.23,
+                    "confidence": 0.99609375,
+                    "speaker": 0,
+                    "punctuated_word": "before"
+                  },
+                  {
+                    "word": "we",
+                    "start": 14.23,
+                    "end": 14.389999,
+                    "confidence": 1,
+                    "speaker": 0,
+                    "punctuated_word": "we"
+                  },
+                  {
+                    "word": "sign",
+                    "start": 14.389999,
+                    "end": 14.709999,
+                    "confidence": 0.9914551,
+                    "speaker": 0,
+                    "punctuated_word": "sign."
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 1.0700006,
+          "start": 15.03,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Paint the garage",
+                "confidence": 0.98828125,
+                "words": [
+                  {
+                    "word": "paint",
+                    "start": 15.11,
+                    "end": 15.59,
+                    "confidence": 0.98706055,
+                    "speaker": 0,
+                    "punctuated_word": "Paint"
+                  },
+                  {
+                    "word": "the",
+                    "start": 15.59,
+                    "end": 15.75,
+                    "confidence": 0.98828125,
+                    "speaker": 0,
+                    "punctuated_word": "the"
+                  },
+                  {
+                    "word": "garage",
+                    "start": 15.75,
+                    "end": 18.789999,
+                    "confidence": 0.9951172,
+                    "speaker": 0,
+                    "punctuated_word": "garage"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 1.920001,
+          "start": 15.03,
+          "is_final": true,
+          "speech_final": true,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "Paint the garage blue.",
+                "confidence": 0.9790039,
+                "words": [
+                  {
+                    "word": "paint",
+                    "start": 15.19,
+                    "end": 15.59,
+                    "confidence": 0.9616699,
+                    "speaker": 0,
+                    "punctuated_word": "Paint"
+                  },
+                  {
+                    "word": "the",
+                    "start": 15.59,
+                    "end": 15.75,
+                    "confidence": 0.9790039,
+                    "speaker": 0,
+                    "punctuated_word": "the"
+                  },
+                  {
+                    "word": "garage",
+                    "start": 15.75,
+                    "end": 16.23,
+                    "confidence": 0.99316406,
+                    "speaker": 0,
+                    "punctuated_word": "garage"
+                  },
+                  {
+                    "word": "blue",
+                    "start": 16.23,
+                    "end": 16.47,
+                    "confidence": 0.876709,
+                    "speaker": 0,
+                    "punctuated_word": "blue."
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 1.0499992,
+          "start": 16.95,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "This is the final",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "this",
+                    "start": 16.95,
+                    "end": 17.27,
+                    "confidence": 0.9941406,
+                    "speaker": 2,
+                    "punctuated_word": "This"
+                  },
+                  {
+                    "word": "is",
+                    "start": 17.27,
+                    "end": 17.51,
+                    "confidence": 1,
+                    "speaker": 2,
+                    "punctuated_word": "is"
+                  },
+                  {
+                    "word": "the",
+                    "start": 17.51,
+                    "end": 17.59,
+                    "confidence": 1,
+                    "speaker": 2,
+                    "punctuated_word": "the"
+                  },
+                  {
+                    "word": "final",
+                    "start": 17.59,
+                    "end": 17.83,
+                    "confidence": 0.99902344,
+                    "speaker": 2,
+                    "punctuated_word": "final"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 2.0499992,
+          "start": 16.95,
+          "is_final": false,
+          "speech_final": false,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "This is the final sentence before",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "this",
+                    "start": 16.95,
+                    "end": 17.35,
+                    "confidence": 0.98828125,
+                    "speaker": 2,
+                    "punctuated_word": "This"
+                  },
+                  {
+                    "word": "is",
+                    "start": 17.35,
+                    "end": 17.51,
+                    "confidence": 1,
+                    "speaker": 2,
+                    "punctuated_word": "is"
+                  },
+                  {
+                    "word": "the",
+                    "start": 17.51,
+                    "end": 17.67,
+                    "confidence": 1,
+                    "speaker": 2,
+                    "punctuated_word": "the"
+                  },
+                  {
+                    "word": "final",
+                    "start": 17.67,
+                    "end": 18.070002,
+                    "confidence": 1,
+                    "speaker": 2,
+                    "punctuated_word": "final"
+                  },
+                  {
+                    "word": "sentence",
+                    "start": 18.070002,
+                    "end": 18.470001,
+                    "confidence": 1,
+                    "speaker": 2,
+                    "punctuated_word": "sentence"
+                  },
+                  {
+                    "word": "before",
+                    "start": 18.470001,
+                    "end": 18.79,
+                    "confidence": 0.9980469,
+                    "speaker": 2,
+                    "punctuated_word": "before"
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Results",
+          "channel_index": [
+            0,
+            1
+          ],
+          "duration": 2.3064365,
+          "start": 16.95,
+          "is_final": true,
+          "speech_final": true,
+          "channel": {
+            "alternatives": [
+              {
+                "transcript": "This is the final sentence before stock.",
+                "confidence": 1,
+                "words": [
+                  {
+                    "word": "this",
+                    "start": 16.95,
+                    "end": 17.35,
+                    "confidence": 0.9902344,
+                    "speaker": 1,
+                    "punctuated_word": "This"
+                  },
+                  {
+                    "word": "is",
+                    "start": 17.35,
+                    "end": 17.51,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "is"
+                  },
+                  {
+                    "word": "the",
+                    "start": 17.51,
+                    "end": 17.67,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "the"
+                  },
+                  {
+                    "word": "final",
+                    "start": 17.67,
+                    "end": 18.070002,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "final"
+                  },
+                  {
+                    "word": "sentence",
+                    "start": 18.070002,
+                    "end": 18.470001,
+                    "confidence": 1,
+                    "speaker": 1,
+                    "punctuated_word": "sentence"
+                  },
+                  {
+                    "word": "before",
+                    "start": 18.470001,
+                    "end": 18.87,
+                    "confidence": 0.99902344,
+                    "speaker": 1,
+                    "punctuated_word": "before"
+                  },
+                  {
+                    "word": "stock",
+                    "start": 18.87,
+                    "end": 19.19,
+                    "confidence": 0.9543457,
+                    "speaker": 1,
+                    "punctuated_word": "stock."
+                  }
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+            "model_info": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            },
+            "model_uuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+            "diarize_info": {
+              "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "arch": "v1"
+            }
+          },
+          "from_finalize": false
+        },
+        {
+          "type": "Metadata",
+          "transaction_key": "deprecated",
+          "request_id": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+          "sha256": "e230b15d42c4f3ad4105f235d54304fc2e08ce79ef7e6c5a03082f7e90b7ecd2",
+          "created": "2026-09-10T20:59:01.335Z",
+          "duration": 19.256437,
+          "channels": 1,
+          "models": [
+            "40bd3654-e622-47c4-a111-63a61b23bfe8"
+          ],
+          "model_info": {
+            "40bd3654-e622-47c4-a111-63a61b23bfe8": {
+              "name": "general-nova-3",
+              "version": "2025-04-17.21547",
+              "arch": "nova-3"
+            }
+          },
+          "diarize_info": {
+            "model_uuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+            "arch": "v1"
+          }
+        }
+      ],
+      "snapshot": {
+        "sessions": [
+          {
+            "connectionId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef",
+            "provider": "deepgram",
+            "configuration": {
+              "configurationVersion": "atlas-deepgram-live-v1",
+              "model": "nova-3",
+              "version": "latest",
+              "diarize_model": "v1",
+              "language": "en-US",
+              "encoding": "linear16",
+              "channels": 1,
+              "interim_results": true,
+              "punctuate": true,
+              "smart_format": false,
+              "filler_words": true,
+              "endpointing": 300,
+              "mip_opt_out": true
+            },
+            "sampleRate": 24000,
+            "timebase": "provider-stream",
+            "audioOffsetMs": null,
+            "providerMetadata": {
+              "requestId": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+              "modelName": "general-nova-3",
+              "modelVersion": "2025-04-17.21547",
+              "modelUuid": "40bd3654-e622-47c4-a111-63a61b23bfe8",
+              "diarizerUuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "diarizerVersion": "v1"
+            }
+          }
+        ],
+        "finalResults": [
+          {
+            "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r0",
+            "connectionId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef",
+            "startMs": 0,
+            "endMs": 2480,
+            "isFinal": true,
+            "text": "The Cedar House inspection is Tuesday.",
+            "speechFinal": true,
+            "fromFinalize": false,
+            "words": [
+              {
+                "text": "The",
+                "rawWord": "the",
+                "startMs": 0,
+                "endMs": 160,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "Cedar",
+                "rawWord": "cedar",
+                "startMs": 160,
+                "endMs": 480,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "House",
+                "rawWord": "house",
+                "startMs": 480,
+                "endMs": 720,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "inspection",
+                "rawWord": "inspection",
+                "startMs": 720,
+                "endMs": 1200,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "is",
+                "rawWord": "is",
+                "startMs": 1200,
+                "endMs": 1520,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "Tuesday.",
+                "rawWord": "tuesday",
+                "startMs": 1520,
+                "endMs": 1920,
+                "providerSpeaker": 0
+              }
+            ],
+            "passages": [
+              {
+                "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r0:p0",
+                "text": "The Cedar House inspection is Tuesday.",
+                "startMs": 0,
+                "endMs": 1920,
+                "providerSpeaker": 0,
+                "speakerId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:speaker0"
+              }
+            ],
+            "providerMetadata": {
+              "requestId": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+              "modelName": "general-nova-3",
+              "modelVersion": "2025-04-17.21547",
+              "diarizerUuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "diarizerVersion": "v1"
+            }
+          },
+          {
+            "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r2480000",
+            "connectionId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef",
+            "startMs": 2480,
+            "endMs": 6200,
+            "isFinal": true,
+            "text": "Yes. The repair budget is forty thousand dollars.",
+            "speechFinal": true,
+            "fromFinalize": false,
+            "words": [
+              {
+                "text": "Yes.",
+                "rawWord": "yes",
+                "startMs": 2480,
+                "endMs": 3280,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "The",
+                "rawWord": "the",
+                "startMs": 3360,
+                "endMs": 3520,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "repair",
+                "rawWord": "repair",
+                "startMs": 3520,
+                "endMs": 3920,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "budget",
+                "rawWord": "budget",
+                "startMs": 3920,
+                "endMs": 4240,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "is",
+                "rawWord": "is",
+                "startMs": 4240,
+                "endMs": 4480,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "forty",
+                "rawWord": "forty",
+                "startMs": 4480,
+                "endMs": 4800,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "thousand",
+                "rawWord": "thousand",
+                "startMs": 4800,
+                "endMs": 5200,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "dollars.",
+                "rawWord": "dollars",
+                "startMs": 5200,
+                "endMs": 5600,
+                "providerSpeaker": 1
+              }
+            ],
+            "passages": [
+              {
+                "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r2480000:p0",
+                "text": "Yes. The repair budget is forty thousand dollars.",
+                "startMs": 2480,
+                "endMs": 5600,
+                "providerSpeaker": 1,
+                "speakerId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:speaker1"
+              }
+            ],
+            "providerMetadata": {
+              "requestId": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+              "modelName": "general-nova-3",
+              "modelVersion": "2025-04-17.21547",
+              "diarizerUuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "diarizerVersion": "v1"
+            }
+          },
+          {
+            "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r6200000",
+            "connectionId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef",
+            "startMs": 6200,
+            "endMs": 9070,
+            "isFinal": true,
+            "text": "Wait. The roof estimate is uncertain.",
+            "speechFinal": true,
+            "fromFinalize": false,
+            "words": [
+              {
+                "text": "Wait.",
+                "rawWord": "wait",
+                "startMs": 6200,
+                "endMs": 6920,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "The",
+                "rawWord": "the",
+                "startMs": 6920,
+                "endMs": 7080,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "roof",
+                "rawWord": "roof",
+                "startMs": 7080,
+                "endMs": 7320,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "estimate",
+                "rawWord": "estimate",
+                "startMs": 7320,
+                "endMs": 7800,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "is",
+                "rawWord": "is",
+                "startMs": 7800,
+                "endMs": 8040,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "uncertain.",
+                "rawWord": "uncertain",
+                "startMs": 8040,
+                "endMs": 8440,
+                "providerSpeaker": 0
+              }
+            ],
+            "passages": [
+              {
+                "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r6200000:p0",
+                "text": "Wait. The roof estimate is uncertain.",
+                "startMs": 6200,
+                "endMs": 8440,
+                "providerSpeaker": 0,
+                "speakerId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:speaker0"
+              }
+            ],
+            "providerMetadata": {
+              "requestId": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+              "modelName": "general-nova-3",
+              "modelVersion": "2025-04-17.21547",
+              "diarizerUuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "diarizerVersion": "v1"
+            }
+          },
+          {
+            "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r9070000",
+            "connectionId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef",
+            "startMs": 9070,
+            "endMs": 10150,
+            "isFinal": true,
+            "text": "Okay.",
+            "speechFinal": true,
+            "fromFinalize": false,
+            "words": [
+              {
+                "text": "Okay.",
+                "rawWord": "okay",
+                "startMs": 9150,
+                "endMs": 9550,
+                "providerSpeaker": 0
+              }
+            ],
+            "passages": [
+              {
+                "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r9070000:p0",
+                "text": "Okay.",
+                "startMs": 9150,
+                "endMs": 9550,
+                "providerSpeaker": 0,
+                "speakerId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:speaker0"
+              }
+            ],
+            "providerMetadata": {
+              "requestId": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+              "modelName": "general-nova-3",
+              "modelVersion": "2025-04-17.21547",
+              "diarizerUuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "diarizerVersion": "v1"
+            }
+          },
+          {
+            "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r10150000",
+            "connectionId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef",
+            "startMs": 10150,
+            "endMs": 15030,
+            "isFinal": true,
+            "text": "Please check the drainage before we sign.",
+            "speechFinal": false,
+            "fromFinalize": false,
+            "words": [
+              {
+                "text": "Please",
+                "rawWord": "please",
+                "startMs": 12710,
+                "endMs": 13030,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "check",
+                "rawWord": "check",
+                "startMs": 13030,
+                "endMs": 13270,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "the",
+                "rawWord": "the",
+                "startMs": 13270,
+                "endMs": 13430,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "drainage",
+                "rawWord": "drainage",
+                "startMs": 13430,
+                "endMs": 13830,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "before",
+                "rawWord": "before",
+                "startMs": 13830,
+                "endMs": 14230,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "we",
+                "rawWord": "we",
+                "startMs": 14230,
+                "endMs": 14390,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "sign.",
+                "rawWord": "sign",
+                "startMs": 14390,
+                "endMs": 14710,
+                "providerSpeaker": 0
+              }
+            ],
+            "passages": [
+              {
+                "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r10150000:p0",
+                "text": "Please check the drainage before we sign.",
+                "startMs": 12710,
+                "endMs": 14710,
+                "providerSpeaker": 0,
+                "speakerId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:speaker0"
+              }
+            ],
+            "providerMetadata": {
+              "requestId": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+              "modelName": "general-nova-3",
+              "modelVersion": "2025-04-17.21547",
+              "diarizerUuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "diarizerVersion": "v1"
+            }
+          },
+          {
+            "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r15030000",
+            "connectionId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef",
+            "startMs": 15030,
+            "endMs": 16950,
+            "isFinal": true,
+            "text": "Paint the garage blue.",
+            "speechFinal": true,
+            "fromFinalize": false,
+            "words": [
+              {
+                "text": "Paint",
+                "rawWord": "paint",
+                "startMs": 15190,
+                "endMs": 15590,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "the",
+                "rawWord": "the",
+                "startMs": 15590,
+                "endMs": 15750,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "garage",
+                "rawWord": "garage",
+                "startMs": 15750,
+                "endMs": 16230,
+                "providerSpeaker": 0
+              },
+              {
+                "text": "blue.",
+                "rawWord": "blue",
+                "startMs": 16230,
+                "endMs": 16470,
+                "providerSpeaker": 0
+              }
+            ],
+            "passages": [
+              {
+                "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r15030000:p0",
+                "text": "Paint the garage blue.",
+                "startMs": 15190,
+                "endMs": 16470,
+                "providerSpeaker": 0,
+                "speakerId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:speaker0"
+              }
+            ],
+            "providerMetadata": {
+              "requestId": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+              "modelName": "general-nova-3",
+              "modelVersion": "2025-04-17.21547",
+              "diarizerUuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "diarizerVersion": "v1"
+            }
+          },
+          {
+            "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r16950000",
+            "connectionId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef",
+            "startMs": 16950,
+            "endMs": 19256,
+            "isFinal": true,
+            "text": "This is the final sentence before stock.",
+            "speechFinal": true,
+            "fromFinalize": false,
+            "words": [
+              {
+                "text": "This",
+                "rawWord": "this",
+                "startMs": 16950,
+                "endMs": 17350,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "is",
+                "rawWord": "is",
+                "startMs": 17350,
+                "endMs": 17510,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "the",
+                "rawWord": "the",
+                "startMs": 17510,
+                "endMs": 17670,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "final",
+                "rawWord": "final",
+                "startMs": 17670,
+                "endMs": 18070,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "sentence",
+                "rawWord": "sentence",
+                "startMs": 18070,
+                "endMs": 18470,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "before",
+                "rawWord": "before",
+                "startMs": 18470,
+                "endMs": 18870,
+                "providerSpeaker": 1
+              },
+              {
+                "text": "stock.",
+                "rawWord": "stock",
+                "startMs": 18870,
+                "endMs": 19190,
+                "providerSpeaker": 1
+              }
+            ],
+            "passages": [
+              {
+                "id": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:r16950000:p0",
+                "text": "This is the final sentence before stock.",
+                "startMs": 16950,
+                "endMs": 19190,
+                "providerSpeaker": 1,
+                "speakerId": "dg-395f8686-b5bb-474f-93a4-f7aa7d906aef:speaker1"
+              }
+            ],
+            "providerMetadata": {
+              "requestId": "01a08d1d-e34e-7a30-abbd-078aa8127709",
+              "modelName": "general-nova-3",
+              "modelVersion": "2025-04-17.21547",
+              "diarizerUuid": "6ff6f59c-c349-443b-aba1-352de7d75943",
+              "diarizerVersion": "v1"
+            }
+          }
+        ],
+        "provisionalResults": [],
+        "text": "The Cedar House inspection is Tuesday.\nYes. The repair budget is forty thousand dollars.\nWait. The roof estimate is uncertain.\nOkay.\nPlease check the drainage before we sign.\nPaint the garage blue.\nThis is the final sentence before stock.",
+        "diagnostics": {
+          "client": {
+            "receivedSamples": 462155,
+            "sentSamples": 462155,
+            "nativeBuffers": 193,
+            "peak": 0.759674072265625,
+            "clippedSamples": 0,
+            "queuePeakBytes": 4800,
+            "firstTextDelayMs": 1145,
+            "finalEvents": 7,
+            "interimEvents": 14,
+            "firstNativeTimestamp": 0,
+            "lastNativeTimestamp": 19.2,
+            "rms": 0.08617054415571578
+          },
+          "server": {
+            "receivedSamples": 462155,
+            "sentSamples": 462155,
+            "receivedBuffers": 193,
+            "peak": 0.759674072265625,
+            "clippedSamples": 0,
+            "queuePeakBytes": 4800,
+            "providerFinalEvents": 7,
+            "providerInterimEvents": 14,
+            "forwardedResults": 21,
+            "duplicateFinals": 0,
+            "coveredInterims": 0,
+            "repairedInterims": 1,
+            "rms": 0.08617054415571578
+          }
+        }
+      }
+    }
+  ]
+}

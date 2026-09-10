@@ -325,3 +325,45 @@ test('background during Stop releases save barrier with a partial source, not a 
   assert.equal((await finalization).draft, 'Before background.');
   harness.unmount();
 });
+
+test('experimental speaker Stop saves final refs before UI batching; failure never touches the local capture', async () => {
+  const { live, connections, harness } = setup();
+  const { savedLiveSource, savedLiveSpeakerSource } = load('src/features/recorder/recorder.transcripts.ts');
+  await live.startLiveTranscription({ recorderSessionId: 'speaker-stop', actualSampleRate: 24000, provider: 'deepgram' });
+  let nativeRecording = true, nativeStops = 0;
+  const capture = new RecorderPcmCapture({ stop() { nativeStops++; } }, () => nativeRecording);
+  connections[0].callbacks.onReady();
+  const before = { sessions: [], finalResults: [], provisionalResults: [], text: '' };
+  connections[0].callbacks.onSpeakers(before);
+  const finalization = live.finishLiveTranscription();
+  const final = { ...before, text: 'Last quiet speaker.', finalResults: [{ id: 'dg-test:r0', text: 'Last quiet speaker.', isFinal: true }] };
+  connections[0].callbacks.onSpeakers(final);
+  connections[0].callbacks.onCompleted();
+  const snapshot = await finalization;
+  const saved = savedLiveSpeakerSource(snapshot, 'speaker-stop');
+  assert.equal(saved.text, 'Last quiet speaker.'); assert.equal(savedLiveSource(snapshot, 'speaker-stop'), null);
+  assert.equal(nativeStops, 0); assert.equal(nativeRecording, true);
+  final.text = 'external mutation'; live.resetLiveTranscription();
+  assert.equal(saved.text, 'Last quiet speaker.'); assert.equal(live.getLiveSnapshot().speakerSnapshot, undefined);
+  assert.equal(harness.state().speakerSnapshot, undefined, 'the previous recording must disappear from the next live display');
+  nativeRecording = false; capture.release(); harness.unmount();
+});
+test('a clean provider close cannot label leftover provisional speech as fully completed', async () => {
+  const { live, connections, harness } = setup();
+  await live.startLiveTranscription({ recorderSessionId: 'unfinished-close', actualSampleRate: 24000, provider: 'deepgram' });
+  connections[0].callbacks.onSpeakers({ sessions: [], finalResults: [], provisionalResults: [{ text: 'unfinished speech' }], text: '' });
+  const finishing = live.finishLiveTranscription(); connections[0].callbacks.onCompleted();
+  assert.equal((await finishing).status, 'failed'); assert.match((await finishing).errorMessage, /unfinalized/);
+  harness.unmount();
+});
+test('experimental provider failure/Stop timeout preserves partial speaker snapshot and actionable status', async () => {
+  const timers = new Map();
+  const { live, connections, harness } = setup({ setTimeout: (fn, ms) => { timers.set(ms, fn); return ms; }, clearTimeout: ms => timers.delete(ms) });
+  await live.startLiveTranscription({ recorderSessionId: 'speaker-timeout', actualSampleRate: 24000, provider: 'deepgram' });
+  connections[0].callbacks.onSpeakers({ sessions: [], finalResults: [], provisionalResults: [{ text: 'Not final yet' }], text: '' });
+  const finalization = live.finishLiveTranscription(); timers.get(16000)();
+  const value = await finalization;
+  assert.equal(value.status, 'failed'); assert.equal(value.speakerSnapshot.provisionalResults[0].text, 'Not final yet');
+  assert.equal(value.draft, ''); assert.equal(connections[0].closed, true);
+  harness.unmount();
+});

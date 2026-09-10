@@ -1,4 +1,5 @@
 import type { LiveTranscriptSegment } from '../recorder.types';
+import type { LiveProvider, LiveSpeakerSnapshot, LiveSpeakerSession, LiveSpeakerResult } from '../live-speakers/live-speakers.model';
 export type LiveTranscriptionStatus =
   | 'idle'
   | 'connecting'
@@ -9,6 +10,8 @@ export type LiveTranscriptionStatus =
   | 'completed';
 
 export interface LiveTranscriptionState {
+  provider?: LiveProvider;
+  speakerSnapshot?: LiveSpeakerSnapshot | undefined;
   actualSampleRate: number | null;
   draft: string;
   errorMessage: string | null;
@@ -18,6 +21,7 @@ export interface LiveTranscriptionState {
 }
 
 export interface LiveTranscriptionStartOptions {
+  provider?: LiveProvider;
   recorderSessionId: string;
   actualSampleRate: number | null;
   captureError?: string | undefined;
@@ -40,7 +44,11 @@ export type LiveTranscriptionServerMessage =
       targetSampleRate: number;
       traceId: string;
       type: 'ready';
+      speakerSession?: LiveSpeakerSession;
     }
+  | { type: 'speaker_diagnostics'; traceId: string; metrics: Record<string, number> }
+  | { type: 'speaker_result'; traceId: string; result: LiveSpeakerResult }
+  | { type: 'speaker_metadata'; traceId: string; connectionId: string; metadata: Record<string, string> }
   | {
       delta: string;
       itemId: string;

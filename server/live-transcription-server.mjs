@@ -17,6 +17,7 @@ import {
 } from './live-transcription-protocol.mjs';
 import { logBackendTranscriptionEvent } from './transcription-observability.mjs';
 import { getLiveRuntimeStatus } from './live-transcription-runtime.mjs';
+import { attachDeepgramSession } from './deepgram/session.mjs';
 
 const LIVE_PATH = '/live-transcribe';
 export const OPENAI_REALTIME_URL =
@@ -64,6 +65,7 @@ export const attachLiveTranscriptionWebSocketServer = ({
   httpServer,
   createUpstreamSocket = (url, options) => new WebSocket(url, options),
   logEvent = logBackendTranscriptionEvent,
+  deepgram = {},
 }) => {
   const webSocketServer = new WebSocketServer({
     maxPayload: MAX_CLIENT_MESSAGE_BYTES,
@@ -85,6 +87,11 @@ export const attachLiveTranscriptionWebSocketServer = ({
       writeUpgradeError(socket, 404, 'Not Found');
       return;
     }
+    const provider = new URL(request.url, 'http://atlas.local').searchParams.get('provider');
+    if (provider && provider !== 'deepgram' && provider !== 'openai') {
+      writeUpgradeError(socket, 400, 'Bad Request');
+      return;
+    }
 
     if (webSocketServer.clients.size >= MAX_CONNECTIONS) {
       writeUpgradeError(socket, 503, 'Service Unavailable');
@@ -96,7 +103,13 @@ export const attachLiveTranscriptionWebSocketServer = ({
     });
   });
 
-  webSocketServer.on('connection', (clientSocket) => {
+  webSocketServer.on('connection', (clientSocket, request) => {
+    // Both providers use this same upgrade/admission boundary. Do not add an
+    // alternate unprotected upgrade when integrating authentication later.
+    if (new URL(request.url, 'http://atlas.local').searchParams.get('provider') === 'deepgram') {
+      attachDeepgramSession(clientSocket, deepgram);
+      return;
+    }
     const startedAt = Date.now();
     const timers = new Set();
     const audioQueue = [];

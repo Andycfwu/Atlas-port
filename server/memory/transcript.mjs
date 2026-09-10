@@ -24,12 +24,17 @@ export function validateIntake(input) {
   let transcriptSource;
   if (input.transcriptSource !== undefined) {
     const source = input.transcriptSource;
-    if (!source || !['live', 'saved_audio', 'diarized_audio'].includes(source.kind)
+    if (!source || !['live', 'saved_audio', 'diarized_audio', 'live_speakers'].includes(source.kind)
       || typeof source.recordingId !== 'string' || !source.recordingId.trim() || source.recordingId.length > 200
       || !['completed', 'paused', 'failed', 'finishing'].includes(source.status)
       || [source.traceId, source.model].some(v => v !== null && (typeof v !== 'string' || !v.trim() || v.length > 200))) throw new MemoryError('Invalid recording transcript provenance.');
     if (source.kind === 'diarized_audio' && (!/^[a-f0-9]{64}$/.test(source.diarizationId) || !/^[a-f0-9]{64}$/.test(source.namesKey))) throw new MemoryError('Invalid diarized source version.');
-    transcriptSource = { ...(source.kind === 'diarized_audio' ? { diarizationId: source.diarizationId, namesKey: source.namesKey } : {}), kind: source.kind, recordingId: source.recordingId, traceId: source.traceId, model: source.model, status: source.status };
+    const extra = {};
+    for (const key of ['provider', 'sourceVersionId', 'createdAt', 'configurationVersion']) if (source[key] !== undefined) {
+      if (typeof source[key] !== 'string' || !source[key].trim() || source[key].length > 200) throw new MemoryError('Invalid transcript version metadata.');
+      extra[key] = source[key];
+    }
+    transcriptSource = { ...extra, ...(source.kind === 'diarized_audio' ? { diarizationId: source.diarizationId, namesKey: source.namesKey } : {}), kind: source.kind, recordingId: source.recordingId, traceId: source.traceId, model: source.model, status: source.status };
   }
   let provenance;
   try { provenance = validateProvenance(input, originalTranscript); }

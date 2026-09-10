@@ -15,7 +15,7 @@ const setup = () => {
     send(data) { this.sent.push(data); }
     close() { this.readyState = 3; this.onclose?.({ code: 1000 }); }
   }
-  const { LiveTranscriptionConnection } = load('src/features/recorder/live/live-transcription.service.ts', {}, { WebSocket: Socket });
+  const { LiveTranscriptionConnection } = load('src/features/recorder/live/live-transcription.service.ts', { '../live-speakers/live-speakers.model': load('src/features/recorder/live-speakers/live-speakers.model.ts') }, { WebSocket: Socket });
   const events = [];
   const revisions = [];
   const snapshots = [];
@@ -38,13 +38,14 @@ test('ready exposes the loaded backend revision and remains compatible with olde
   }
 });
 
-test('Stop before ready drains queued PCM before complete and waits for final acknowledgement', async () => {
+test('Stop before ready drains queued PCM before complete and waits for final acknowledgement', { timeout: 2500 }, async () => {
   const { connection, socket, message, events } = setup();
   connection.sendAudio(pcm());
   connection.sendAudio(pcm());
   connection.complete();
   message({ type: 'ready', resampling: false, targetSampleRate: 24000 });
-  await tick();
+  const deadline = Date.now() + 1500;
+  while (socket.sent.at(-1) !== JSON.stringify({ type: 'complete' }) && Date.now() < deadline) await tick();
   assert.equal(socket.sent.filter((value) => value instanceof ArrayBuffer).length, 2);
   assert.deepEqual(JSON.parse(socket.sent.at(-1)), { type: 'complete' });
   assert.equal(socket.readyState, 1);
@@ -98,4 +99,16 @@ test('live snapshots preserve raw delta and final strings for every item without
   assert.equal(events.at(-1), '  Perhaps forty.  No, fifty.\n');
   assert.deepEqual(snapshots.at(-1), [{ itemId: 'a', deltaText: '  perhaps forty', finalText: '  Perhaps forty. ' }, { itemId: 'b', deltaText: '', finalText: 'No, fifty.\n' }]);
   connection.close('test_finished');
+});
+
+test('queued PCM is owned by the connection and cannot change if the caller reuses its buffer', { timeout: 2000 }, async () => {
+  const { connection, socket, message } = setup();
+  const data = new Int16Array([1, -1, 0, 17, -21]).buffer;
+  connection.sendAudio({ data, sampleRate: 24000, channels: 1 });
+  new Int16Array(data).fill(32000);
+  message({ type: 'ready', resampling: false, targetSampleRate: 24000 });
+  const deadline=Date.now()+1000;
+  while(!socket.sent.some(v=>v instanceof ArrayBuffer)&&Date.now()<deadline)await tick();
+  assert.deepEqual([...new Int16Array(socket.sent.find(v=>v instanceof ArrayBuffer))],[1,-1,0,17,-21]);
+  connection.close('synthetic_done');
 });

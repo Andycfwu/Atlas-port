@@ -8,9 +8,11 @@ import { deriveLiveTranscriptionWebSocketUrl, LiveTranscriptionConnection } from
 import { getLiveTranscriptionUserMessage } from './live-transcription.errors';
 import type { LiveTranscriptionStartOptions, LiveTranscriptionState } from './live-transcription.types';
 import type { LiveTranscriptSegment } from '../recorder.types';
+import type { LiveSpeakerSnapshot } from '../live-speakers/live-speakers.model';
 
 const INITIAL_STATE: LiveTranscriptionState = {
   actualSampleRate: null, draft: '', errorMessage: null, status: 'idle', traceId: null,
+  provider: 'openai', speakerSnapshot: undefined,
 };
 const CLIENT_REVISION = 'live-network-guidance-4';
 const emptyDelivery = () => ({ nativeBuffers: 0, nativeBytes: 0, firstBufferAt: 0, lastBufferAt: 0, draftPublished: false });
@@ -23,8 +25,9 @@ export const useLiveTranscription = () => {
   const generation = useRef(0);
   const draftRef = useRef('');
   const segmentsRef = useRef<LiveTranscriptSegment[]>([]);
+  const speakerSnapshotRef = useRef<LiveSpeakerSnapshot | undefined>(undefined);
   const finishWaiters = useRef(new Set<(snapshot: LiveTranscriptionState) => void>());
-  const snapshot = useCallback((): LiveTranscriptionState => ({ ...stateRef.current, draft: draftRef.current, segments: segmentsRef.current.map(s => ({ ...s })) }), []);
+  const snapshot = useCallback((): LiveTranscriptionState => ({ ...stateRef.current, draft: draftRef.current, segments: segmentsRef.current.map(s => ({ ...s })), speakerSnapshot: speakerSnapshotRef.current }), []);
   const batchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failureTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const delivery = useRef(emptyDelivery());
@@ -42,7 +45,7 @@ export const useLiveTranscription = () => {
     if (failureTimer.current) clearTimeout(failureTimer.current);
     batchTimer.current = failureTimer.current = null;
   }, []);
-  const stopLiveTranscription = useCallback((reason: string, nextStatus: 'completed' | 'failed' | 'paused' = 'completed') => {
+  const stopLiveTranscription = useCallback((reason: string, nextStatus: 'completed' | 'failed' | 'paused' = 'completed', failureMessage?: string) => {
     const current = stateRef.current;
     // Stop, backgrounding and stale cleanup must not erase a failure or fake success.
     if (['idle', 'failed', 'paused', 'completed'].includes(current.status)) return;
@@ -61,7 +64,7 @@ export const useLiveTranscription = () => {
     generation.current += 1;
     connectionRef.current?.close(reason);
     connectionRef.current = null;
-    publish({ draft: draftRef.current, status: nextStatus, errorMessage: nextStatus === 'failed' ? getLiveTranscriptionUserMessage(reason, appConfig.apiUrl) : null });
+    publish({ draft: draftRef.current, speakerSnapshot: speakerSnapshotRef.current, status: nextStatus, errorMessage: nextStatus === 'failed' ? (failureMessage ?? getLiveTranscriptionUserMessage(reason, appConfig.apiUrl)) : null });
     if (current.traceId) {
       logTranscriptionEvent(nextStatus === 'failed' ? 'warn' : 'info',
         nextStatus === 'failed' ? 'LIVE_STREAM_FAILED' : 'LIVE_STREAM_PAUSED', current.traceId,
@@ -78,16 +81,17 @@ export const useLiveTranscription = () => {
     connectionRef.current = null;
     draftRef.current = '';
     segmentsRef.current = [];
+    speakerSnapshotRef.current = undefined;
     delivery.current = emptyDelivery();
     publish(INITIAL_STATE);
   }, [clearTimers, publish, snapshot]);
 
-  const startLiveTranscription = useCallback(async ({ recorderSessionId, actualSampleRate, captureError, forceFailure }: LiveTranscriptionStartOptions) => {
+  const startLiveTranscription = useCallback(async ({ recorderSessionId, actualSampleRate, captureError, forceFailure, provider = 'openai' }: LiveTranscriptionStartOptions) => {
     resetLiveTranscription();
     const id = generation.current;
     const traceId = createTranscriptionTraceId();
     const backendHost = getBackendHost(appConfig.apiUrl);
-    publish({ actualSampleRate, status: 'connecting', traceId });
+    publish({ actualSampleRate, status: 'connecting', traceId, provider });
     logTranscriptionEvent('info', 'LIVE_TRANSCRIPTION_REQUESTED', traceId, {
       backendHost, recorderSessionId, actualSampleRate, requestedSampleRate: 24_000,
       channels: 1, encoding: 'int16', liveMode: forceFailure ? 'force-failure' : 'on', clientRevision: CLIENT_REVISION,
@@ -95,9 +99,9 @@ export const useLiveTranscription = () => {
     const fail = (code: string, message: string) => {
       if (id !== generation.current) return;
       logTranscriptionEvent('warn', 'LIVE_STREAM_FAILED', traceId, { backendHost, recorderSessionId, code, errorMessage: message });
-      stopLiveTranscription(code, 'failed');
+      stopLiveTranscription(code, 'failed', provider === 'deepgram' ? message : undefined);
     };
-    const url = deriveLiveTranscriptionWebSocketUrl(appConfig.apiUrl);
+    const url = deriveLiveTranscriptionWebSocketUrl(appConfig.apiUrl, provider);
     if (!url || captureError || actualSampleRate === null) {
       const captureUnavailable = Boolean(captureError) || actualSampleRate === null;
       fail(captureUnavailable ? 'LIVE_CAPTURE_UNAVAILABLE' : 'LIVE_API_URL_MISSING', captureError ?? (captureUnavailable ? 'Live capture sample rate unavailable.' : 'Live backend URL unavailable.'));
@@ -107,6 +111,15 @@ export const useLiveTranscription = () => {
       const connection = new LiveTranscriptionConnection(url, {
         actualSampleRate, channels: 1, encoding: 'int16', requestedSampleRate: 24_000, traceId,
       }, {
+        onSpeakers: (next) => {
+          if (id !== generation.current || provider !== 'deepgram') return;
+          speakerSnapshotRef.current = next;
+          // Provider finals are read from refs during Stop, independently of UI batching.
+          if (!batchTimer.current) batchTimer.current = setTimeout(() => {
+            batchTimer.current = null;
+            if (id === generation.current) publish({ speakerSnapshot: speakerSnapshotRef.current });
+          }, 250);
+        },
         onReady: (backendRevision) => {
           if (id !== generation.current) return;
           if (stateRef.current.status !== 'finishing') publish({ status: 'streaming' });
@@ -129,7 +142,9 @@ export const useLiveTranscription = () => {
         onCompleted: () => {
           if (id !== generation.current) return;
           clearTimers();
-          publish({ draft: draftRef.current, status: 'completed' });
+          const unfinished = provider === 'deepgram' && speakerSnapshotRef.current?.provisionalResults.some(result => result.text.trim());
+          publish({ draft: draftRef.current, speakerSnapshot: speakerSnapshotRef.current, status: unfinished ? 'failed' : 'completed',
+            errorMessage: unfinished ? 'Deepgram closed with unfinalized text. Received final and provisional results are preserved separately; the transcript may be incomplete.' : null });
           logTranscriptionEvent('info', 'LIVE_STREAM_COMPLETED', traceId, { recorderSessionId, draftCharacterCount: draftRef.current.length });
           connectionRef.current = null;
         },

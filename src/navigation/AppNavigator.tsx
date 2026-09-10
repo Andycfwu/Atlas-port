@@ -4,6 +4,7 @@ import { BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, Scrol
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { LineIcon } from '../components/LineIcon';
+import { colors } from '../config/theme';
 import { AtlasScreen } from '../features/atlas';
 import { AtlasMark } from '../features/chat/AtlasMark';
 import { ChatHistoryScreen } from '../features/chat/ChatHistoryScreen';
@@ -11,6 +12,7 @@ import { useChats } from '../features/chat/ChatProvider';
 import { chatColors as c } from '../features/chat/chat.theme';
 import { RecorderScreen, RecordingDetailScreen, useRecorder } from '../features/recorder';
 import type { SavedRecording } from '../features/recorder/recorder.types';
+import type { RecorderViewState } from '../features/recorder/recording-library.model';
 import { MeetingMemoryScreen } from '../features/memory/MeetingMemoryScreen';
 import { AppDrawer, type AppDestination } from './AppDrawer';
 
@@ -23,6 +25,7 @@ export function AppNavigator() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
+  const [recorderView, setRecorderView] = useState<RecorderViewState>({ tab: 'record', query: '', filter: 'all' });
   const [diarizedImport, setDiarizedImport] = useState<DiarizedTranscript | undefined>(undefined);
   const [recordingImport, setRecordingImport] = useState<SavedRecording | null>(null);
   const { isRecording } = useRecorder();
@@ -49,21 +52,23 @@ export function AppNavigator() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <SafeAreaView edges={['top', 'left', 'right']} style={styles.container}>
-        <View style={styles.header}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, destination === 'recorder' && styles.recorderSurface]}>
+        <View style={[styles.header, destination === 'recorder' && styles.recorderHeader]}>
           <Pressable accessibilityRole="button" accessibilityLabel="Open menu" accessibilityState={{ expanded: menuOpen }} onPress={() => { Keyboard.dismiss(); setMenuOpen(true); }} style={styles.headerButton}><LineIcon name="menu" color={c.ink} /></Pressable>
           <Text accessibilityRole="header" numberOfLines={1} style={styles.headerTitle}>{titles[destination]}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="New chat" disabled={!ready} accessibilityState={{ disabled: !ready }} onPress={newChat} style={styles.headerButton}><LineIcon name="plus" color={ready ? c.muted : c.border} /></Pressable>
+          {destination === 'recorder'
+            ? <Pressable accessibilityRole="button" accessibilityLabel="Open Meeting Memory" onPress={() => navigate('memory')} style={[styles.headerButton, styles.memoryButton]}><LineIcon name="chat" color={colors.brand} /></Pressable>
+            : <Pressable accessibilityRole="button" accessibilityLabel="New chat" disabled={!ready} accessibilityState={{ disabled: !ready }} onPress={newChat} style={styles.headerButton}><LineIcon name="plus" color={ready ? c.muted : c.border} /></Pressable>}
         </View>
         {error ? <View style={styles.notice}><Text accessibilityRole="alert" style={styles.noticeText}>{error}</Text>{!ready ? <Pressable accessibilityRole="button" onPress={store.hydrate} style={styles.retry}><Text style={styles.retryText}>Retry</Text></Pressable> : null}</View> : null}
-        {isRecording && destination !== 'recorder' ? <Pressable accessibilityRole="button" accessibilityLabel="Recording in progress. Return to Live Transcription" onPress={() => { setSelectedRecordingId(null); navigate('recorder'); }} style={styles.recording}><View style={styles.recordingDot} /><Text style={styles.recordingText}>Recording in progress</Text><Text style={styles.recordingText}>Return →</Text></Pressable> : null}
+        {isRecording && (destination !== 'recorder' || selectedRecordingId) ? <Pressable accessibilityRole="button" accessibilityLabel="Recording in progress. Return to Live Transcription" onPress={() => { setSelectedRecordingId(null); setRecorderView(current => ({ ...current, tab: 'record' })); navigate('recorder'); }} style={styles.recording}><View style={styles.recordingDot} /><Text style={styles.recordingText}>Recording in progress</Text><Text style={styles.recordingText}>Return →</Text></Pressable> : null}
         <View style={styles.destination}>
           <MeetingMemoryScreen diarizedImport={diarizedImport} recordingImport={recordingImport} onImportHandled={() => { setRecordingImport(null); setDiarizedImport(undefined); }} active={destination === 'memory'} onExit={() => navigate('atlas')} />
           {destination === 'atlas' ? <AtlasScreen keyboardVisible={keyboardVisible} />
             : destination === 'search' || destination === 'history' ? <ChatHistoryScreen key={destination} search={destination === 'search'} onOpenChat={openChat} onNewChat={newChat} />
               : destination === 'recorder' ? selectedRecordingId
                 ? <RecordingDetailScreen onMeetingMemory={(recording, diarized) => { setDiarizedImport(diarized); setRecordingImport(recording); navigate('memory'); }} onBack={() => setSelectedRecordingId(null)} onDeleted={() => setSelectedRecordingId(null)} recordingId={selectedRecordingId} />
-                : <RecorderScreen onOpenRecording={setSelectedRecordingId} />
+                : <RecorderScreen viewState={recorderView} onViewStateChange={setRecorderView} onOpenMeetingMemory={() => navigate('memory')} onOpenRecording={id => { setRecorderView(current => ({ ...current, tab: 'library' })); setSelectedRecordingId(id); }} />
                 : destination === 'memory' ? null : <SafeAreaView edges={['bottom']} style={styles.destination}><ScrollView contentContainerStyle={styles.comingSoon}>
                   <AtlasMark /><Text style={styles.soonEyebrow}>COMING SOON</Text><Text accessibilityRole="header" style={styles.soonTitle}>{titles[destination]}</Text>
                   <Text style={styles.soonBody}>{destination === 'files' ? 'A home for the files behind your next move. File browsing and attachments aren’t available yet.' : 'Your Atlas preferences will live here. Profiles and account sign-in aren’t available yet.'}</Text>
@@ -78,6 +83,9 @@ export function AppNavigator() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background }, destination: { flex: 1 },
+  recorderSurface: { backgroundColor: colors.canvas },
+  recorderHeader: { borderBottomColor: colors.border, paddingHorizontal: 16, minHeight: 64 },
+  memoryButton: { backgroundColor: colors.sageSoft, minHeight: 44 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, minHeight: 60, borderBottomWidth: 1, borderBottomColor: c.border },
   headerButton: { minWidth: 44, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }, headerTitle: { flex: 1, color: c.ink, fontSize: 18, fontWeight: '700', letterSpacing: -0.4 },
   notice: { padding: 12, backgroundColor: c.orangeSoft, flexDirection: 'row', alignItems: 'center', gap: 12 }, noticeText: { flex: 1, color: c.orange, fontSize: 13, lineHeight: 19 },

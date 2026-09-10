@@ -1,4 +1,6 @@
 import type { AudioStreamBuffer } from 'expo-audio';
+import { isSpeakerSession, isSpeakerResult, isSpeakerMetadata, LiveSpeakerAccumulator } from '../live-speakers/live-speakers.model';
+import type { LiveProvider, LiveSpeakerSnapshot } from '../live-speakers/live-speakers.model';
 
 import type {
   LiveTranscriptionServerMessage,
@@ -12,6 +14,7 @@ const FINISH_TIMEOUT_MS = 15_000;
 const QUEUE_RETRY_MS = 20;
 
 type LiveConnectionFailureCode =
+  | 'LIVE_INVALID_AUDIO'
   | 'LIVE_BACKPRESSURE'
   | 'LIVE_CONNECTION_CLOSED'
   | 'LIVE_CONNECTION_FAILED'
@@ -30,6 +33,7 @@ export class LiveTranscriptionConnectionError extends Error {
 }
 
 interface LiveTranscriptionConnectionCallbacks {
+  onSpeakers?: (snapshot: LiveSpeakerSnapshot) => void;
   onCompleted: () => void;
   onDraft: (draft: string, segments?: import('../recorder.types').LiveTranscriptSegment[]) => void;
   onFailure: (error: LiveTranscriptionConnectionError) => void;
@@ -54,6 +58,7 @@ const readString = (
 
 export const deriveLiveTranscriptionWebSocketUrl = (
   apiUrl: string | null,
+  provider: LiveProvider = 'openai',
 ): string | null => {
   if (!apiUrl) {
     return null;
@@ -72,6 +77,7 @@ export const deriveLiveTranscriptionWebSocketUrl = (
 
     url.pathname = `${url.pathname.replace(/\/+$/, '')}/live-transcribe`;
     url.search = '';
+    if (provider === 'deepgram') url.searchParams.set('provider', 'deepgram');
     url.hash = '';
     return url.toString();
   } catch {
@@ -111,10 +117,15 @@ export const parseLiveTranscriptionServerMessage = (
 
     return typeof targetSampleRate === 'number' &&
       Number.isFinite(targetSampleRate) &&
-      typeof resampling === 'boolean'
-      ? { backendRevision: readString(parsed, 'backendRevision'), resampling, targetSampleRate, traceId, type }
+      typeof resampling === 'boolean' && (parsed.speakerSession === undefined || isSpeakerSession(parsed.speakerSession))
+      ? { backendRevision: readString(parsed, 'backendRevision'), resampling, targetSampleRate, traceId, type,
+          ...(isSpeakerSession(parsed.speakerSession) ? { speakerSession: parsed.speakerSession } : {}) }
       : null;
   }
+  if (type === 'speaker_diagnostics') return isRecord(parsed.metrics) && Object.keys(parsed.metrics).length <= 32 && Object.values(parsed.metrics).every(v => typeof v === 'number' && Number.isFinite(v) && v >= 0) ? { type, traceId, metrics: parsed.metrics as Record<string, number> } : null;
+  if (type === 'speaker_result') return isSpeakerResult(parsed.result) ? { type, traceId, result: parsed.result } : null;
+  if (type === 'speaker_metadata') return typeof parsed.connectionId === 'string' && isSpeakerMetadata(parsed.metadata)
+    ? { type, traceId, connectionId: parsed.connectionId, metadata: parsed.metadata } : null;
 
   if (type === 'partial') {
     const delta = readString(parsed, 'delta');
@@ -159,6 +170,15 @@ const socketBufferedAmount = (socket: WebSocket): number => {
 };
 
 export class LiveTranscriptionConnection {
+  private readonly diagnostics = { receivedSamples: 0, sentSamples: 0, nativeBuffers: 0, peak: 0, squared: 0, clippedSamples: 0, queuePeakBytes: 0, firstTextDelayMs: 0, finalEvents: 0, interimEvents: 0, firstNativeTimestamp: 0, lastNativeTimestamp: 0 };
+  private serverDiagnostics: Record<string, number> = {};
+  private readonly beganAt = Date.now();
+  private speakerMode = false;
+  private emitSpeakers() {
+    const { squared, ...counts } = this.diagnostics;
+    this.callbacks.onSpeakers?.({ ...this.speakers.snapshot(), diagnostics: { client: { ...counts, rms: Math.sqrt(squared / Math.max(1, counts.receivedSamples)) }, server: this.serverDiagnostics } });
+  }
+  private readonly speakers = new LiveSpeakerAccumulator();
   private readonly audioQueue: ArrayBuffer[] = [];
   private readonly segmentOrder: string[] = [];
   private readonly segments = new Map<string, TranscriptSegment>();
@@ -253,6 +273,18 @@ export class LiveTranscriptionConnection {
       return;
     }
 
+    if (!buffer.data.byteLength || buffer.data.byteLength % 2) {
+      this.fail(new LiveTranscriptionConnectionError('LIVE_INVALID_AUDIO', 'PCM16 requires complete 16-bit samples. Local audio is preserved.')); return;
+    }
+    const view = new DataView(buffer.data);
+    const d = this.diagnostics;
+    d.nativeBuffers++;
+    if (Number.isFinite(buffer.timestamp)) { if (d.nativeBuffers === 1) d.firstNativeTimestamp = buffer.timestamp; d.lastNativeTimestamp = buffer.timestamp; }
+    for (let offset = 0; offset < view.byteLength; offset += 2) {
+      const raw = view.getInt16(offset, true), value = raw / 32768;
+      d.receivedSamples++; d.squared += value * value; d.peak = Math.max(d.peak, Math.abs(value));
+      if (raw === -32768 || raw === 32767) d.clippedSamples++;
+    }
     const nextSize = this.audioQueueBytes + buffer.data.byteLength;
 
     if (nextSize > MAX_QUEUED_AUDIO_BYTES) {
@@ -265,7 +297,8 @@ export class LiveTranscriptionConnection {
       return;
     }
 
-    this.audioQueue.push(buffer.data);
+    this.diagnostics.queuePeakBytes = Math.max(this.diagnostics.queuePeakBytes, nextSize);
+    this.audioQueue.push(buffer.data.slice(0));
     this.audioQueueBytes = nextSize;
     this.schedulePump(0);
   }
@@ -316,10 +349,30 @@ export class LiveTranscriptionConnection {
     }
 
     if (message.type === 'ready') {
+      if (message.speakerSession) {
+        this.speakerMode = true;
+        this.speakers.start(message.speakerSession);
+        this.emitSpeakers();
+      }
       this.ready = true;
       this.clearReadyTimer();
       this.callbacks.onReady(message.backendRevision);
       this.schedulePump(0);
+      return;
+    }
+    if (message.type === 'speaker_diagnostics') { this.serverDiagnostics = message.metrics; this.emitSpeakers(); return; }
+    if (message.type === 'speaker_result' || message.type === 'speaker_metadata') {
+      try {
+        if (message.type === 'speaker_result') {
+          if (message.result.text && !this.diagnostics.firstTextDelayMs) this.diagnostics.firstTextDelayMs = Date.now() - this.beganAt;
+          this.diagnostics[message.result.isFinal ? 'finalEvents' : 'interimEvents']++;
+          this.speakers.accept(message.result);
+        }
+        else this.speakers.metadata(message.connectionId, message.metadata);
+        this.emitSpeakers();
+      } catch {
+        this.fail(new LiveTranscriptionConnectionError('LIVE_INVALID_RESPONSE', 'Live speaker results were inconsistent. Received text is preserved.'));
+      }
       return;
     }
 
@@ -344,6 +397,7 @@ export class LiveTranscriptionConnection {
         this.fail(new LiveTranscriptionConnectionError('LIVE_INVALID_RESPONSE', 'The backend completed before audio was drained.'));
         return;
       }
+      if (this.speakerMode) this.emitSpeakers();
       this.callbacks.onCompleted();
       this.close('stream_completed');
       return;
@@ -429,6 +483,7 @@ export class LiveTranscriptionConnection {
 
     try {
       socket.send(next);
+      this.diagnostics.sentSamples += next.byteLength / 2;
     } catch (error) {
       this.fail(
         new LiveTranscriptionConnectionError(
@@ -450,6 +505,7 @@ export class LiveTranscriptionConnection {
     }
 
     this.failed = true;
+    if (this.speakerMode) this.emitSpeakers();
     this.callbacks.onFailure(error);
     this.close('live_transcription_failed');
   }

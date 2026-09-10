@@ -204,6 +204,16 @@ export function RecordingPlayerProvider({ children }: PropsWithChildren) {
           return;
         }
 
+        if (__DEV__) {
+          // Expo Go exposes player gain, but not AVAudioSession's actual output
+          // route/mode. Do not label the requested policy as a measured route.
+          console.info('[RecordingPlaybackStart]', {
+            recordingId: recording.id,
+            playerVolume: player.volume,
+            muted: player.muted,
+            requestedSessionPolicy: 'playback-default-then-mix-v1',
+          });
+        }
         player.play();
         setPlaybackError(null);
       } catch (error) {

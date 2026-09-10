@@ -8,6 +8,7 @@ export type TranscriptionStatus =
   | 'failed';
 
 export interface SavedRecording {
+  liveSpeakerTranscripts?: import('./live-speakers/live-speakers.model').SavedLiveSpeakerTranscript[];
   id: string;
   filename: string;
   uri: string;

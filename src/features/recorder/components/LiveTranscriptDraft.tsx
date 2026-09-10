@@ -12,18 +12,16 @@ const statusLabels: Record<LiveTranscriptionState['status'], string> = {
   finishing: 'FINISHING',
   connecting: 'CONNECTING',
   failed: 'UNAVAILABLE',
-  idle: 'IDLE',
+  idle: 'READY',
   paused: 'PAUSED',
   streaming: 'LIVE',
 };
 
 export function LiveTranscriptDraft({ state }: LiveTranscriptDraftProps) {
-  if (state.status === 'idle') {
-    return null;
-  }
-
   const body = state.draft
     ? state.draft
+    : state.status === 'idle'
+      ? 'Your words will appear here as you record. After saving, review the transcript alongside the original audio.'
     : state.status === 'connecting'
       ? 'Connecting to Atlas transcription…'
       : state.status === 'paused'
@@ -40,7 +38,7 @@ export function LiveTranscriptDraft({ state }: LiveTranscriptDraftProps) {
     <View style={styles.card}>
       <View style={styles.headingRow}>
         <View>
-          <Text style={styles.eyebrow}>PROVISIONAL TRANSCRIPT</Text>
+          <Text style={styles.eyebrow}>LIVE TRANSCRIPTION</Text>
           <Text style={styles.title}>Live draft</Text>
         </View>
         <View
@@ -66,7 +64,7 @@ export function LiveTranscriptDraft({ state }: LiveTranscriptDraftProps) {
       </ScrollView>
       {state.draft && state.errorMessage ? <Text accessibilityRole="alert" style={styles.failureMessage}>{state.errorMessage}</Text> : null}
       <Text style={styles.disclaimer}>
-        Live text is saved separately from post-recording text. Review both against the original audio.
+        {state.status === 'idle' ? 'Live text needs a connection. Audio is saved on this device.' : 'Provisional text · Saved separately from the saved-audio transcript.'}
       </Text>
     </View>
   );
@@ -83,12 +81,14 @@ const styles = StyleSheet.create({
   },
   headingRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
   eyebrow: {
-    color: colors.accent,
-    fontSize: 8,
+    color: colors.mutedInk,
+    fontSize: 9,
     fontWeight: '900',
     letterSpacing: 1.3,
   },
@@ -132,8 +132,8 @@ const styles = StyleSheet.create({
   disclaimer: {
     marginTop: 10,
     color: colors.mutedInk,
-    fontSize: 9,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 16,
   },
   failureMessage: {
     marginTop: 12,

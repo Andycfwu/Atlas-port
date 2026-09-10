@@ -1,3 +1,4 @@
+import { TranscriptVersions } from './TranscriptVersions';
 import type { DiarizedTranscript } from '../recorder/diarization/diarization.types';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Keyboard, Modal, Pressable, ScrollView, Text, View } from 'react-native';
@@ -16,6 +17,7 @@ import { Field, MemoryButton, MemoryFieldFocus, Panel, s } from './memory.ui';
 
 const api = createMeetingMemoryService();
 export function MeetingMemoryScreen({ active, onExit, recordingImport, diarizedImport, onImportHandled }: { active: boolean; onExit: () => void; recordingImport: SavedRecording | null; diarizedImport?: DiarizedTranscript | undefined; onImportHandled: () => void }) {
+  const [questionRevisionId, setQuestionRevisionId] = useState<string | undefined>();
   const [storedScreen, setScreen] = useState<'list' | 'intake' | 'detail' | 'ask' | 'recording-intake'>('list');
   const screen = recordingImport ? 'recording-intake' : storedScreen;
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
@@ -132,7 +134,7 @@ export function MeetingMemoryScreen({ active, onExit, recordingImport, diarizedI
       const result = await api.create(input);
       onImportHandled();
       setMeeting(result.meeting); setScreen('detail');
-      if (process && result.meeting.status !== 'ready') setMeeting(await api.process(result.meeting.id));
+      if (process && (result.meeting.status !== 'ready' || result.meeting.desiredRevisionId !== result.meeting.revisionId)) setMeeting(await api.process(result.meeting.id));
       await reload();
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
@@ -162,7 +164,7 @@ export function MeetingMemoryScreen({ active, onExit, recordingImport, diarizedI
         <AtlasMark small /><Text style={s.eyebrow}>MEETING MEMORY</Text><Text accessibilityRole="header" style={s.title}>Keep the thread.</Text><Text style={s.subtitle}>Turn a finished conversation into topics, decisions, and answers you can trace back to the source.</Text>
         <Text style={s.muted}>Single-user development · Shared by anyone using this Mac backend · Completed results are stored on the Mac.</Text>
         <MemoryButton disabled={!draftReady} onPress={() => { setError(null); setScreen('intake'); }}>{draft.originalTranscript ? 'Continue transcript intake' : 'Add a transcript'}</MemoryButton>
-        <MemoryButton secondary onPress={() => { setQuestionMeetingId(null); setScreen('ask'); }}>Ask across meetings</MemoryButton>
+        <MemoryButton secondary onPress={() => { setQuestionRevisionId(undefined); setQuestionMeetingId(null); setScreen('ask'); }}>Ask across meetings</MemoryButton>
         <Field label="Find a meeting" placeholder="Title, participant, or date" value={search} onChangeText={setSearch} />
         <View style={s.row}><Text style={[s.heading, s.grow]}>Your meetings</Text><MemoryButton secondary disabled={loading} onPress={() => { setLoading(true); void reload(); }}>Refresh</MemoryButton></View>
         {loading ? <ActivityIndicator accessibilityLabel="Loading meetings" /> : null}
@@ -170,18 +172,18 @@ export function MeetingMemoryScreen({ active, onExit, recordingImport, diarizedI
         {meetings.filter(m => `${m.title} ${m.participants.join(' ')} ${m.date}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).map(m => <Pressable key={m.id} accessibilityRole="button" disabled={busy} style={s.card} onPress={() => void openMeeting(m.id)}><Text style={s.eyebrow}>{statusLabel(m)}</Text><Text style={s.heading}>{m.title}</Text><Text style={s.muted}>{m.date} · {m.participants.join(', ') || 'Participants not supplied'}</Text><Text style={s.muted}>{m.transcriptSource?.kind === 'diarized_audio' ? 'Diarized source version · ' : ''}{m.topicCount ?? 0} topics · Open meeting →</Text></Pressable>)}
       </> : screen === 'intake' ? <MeetingIntakeScreen draft={draft} setDraft={updateDraft} busy={busy} onSave={p => void save(p)} onError={setError} onStepChange={() => scroller.current?.scrollTo({ y: 0, animated: false })} />
         : screen === 'recording-intake' && recordingImport ? <RecordingMemoryIntake key={`${diarizedImport?.id ?? recordingImport.id}-${recordingImport.liveTranscript?.traceId ?? recordingImport.transcriptionTraceId}`} diarized={diarizedImport} recording={recordingImport} busy={busy} onSave={(input, process) => void saveRecording(input, process)} onError={setError} />
-        : screen === 'detail' && meeting ? <MeetingDetail key={meeting.id} meeting={meeting} busy={busy} onProcess={r => void processMeeting(r)} onRenameSpeakers={async names => {
+        : screen === 'detail' && meeting ? <><TranscriptVersions key={meeting.id} meeting={meeting} onChanged={setMeeting} onConsult={id => { setQuestionRevisionId(id); setQuestionMeetingId(meeting.id); setScreen('ask'); }} /><MeetingDetail key={`${meeting.id}:${meeting.revisionId}`} meeting={meeting} busy={busy} onProcess={r => void processMeeting(r)} onRenameSpeakers={async names => {
             if (busy) return;
             setBusy(true); setError(null);
-            try { const result = await api.reviseSpeakers(meeting.id, names); setMeeting(result.meeting); if (result.meeting.status !== 'ready') setMeeting(await api.process(result.meeting.id)); await reload(); }
+            try { const result = await api.reviseSpeakers(meeting.id, names); setMeeting(result.meeting); if (result.meeting.status !== 'ready' || result.meeting.desiredRevisionId !== result.meeting.revisionId) setMeeting(await api.process(result.meeting.id)); await reload(); }
             catch (e) { setError((e as Error).message); } finally { setBusy(false); }
-          }} onAsk={() => { setQuestionMeetingId(meeting.id); setScreen('ask'); }} onSource={openSource} />
-          : screen === 'ask' ? <MeetingQuestions key={questionMeetingId ?? 'all'} initialMeetingId={questionMeetingId} meetings={meetings} history={answers} onAsk={async (question, filters) => { const answer = await api.ask(question, filters); setAnswers(old => [answer, ...old]); return answer; }} onSource={openSource} /> : null}
+          }} onAsk={() => { setQuestionRevisionId(undefined); setQuestionMeetingId(meeting.id); setScreen('ask'); }} onSource={openSource} /></>
+          : screen === 'ask' ? <MeetingQuestions initialRevisionId={questionRevisionId} key={`${questionMeetingId ?? 'all'}:${questionRevisionId ?? 'current'}`} initialMeetingId={questionMeetingId} meetings={meetings} history={answers} onAsk={async (question, filters) => { const answer = await api.ask(question, filters); setAnswers(old => [answer, ...old]); return answer; }} onSource={openSource} /> : null}
     </ScrollView>
     <Modal visible={Boolean(source)} animationType="slide" onRequestClose={() => setSource(null)} presentationStyle="pageSheet">
       <SafeAreaView style={s.page}><ScrollView contentContainerStyle={s.content}>
         <MemoryButton secondary onPress={() => setSource(null)}>Close source</MemoryButton><Text style={s.eyebrow}>ORIGINAL SOURCE · {source?.passage.passageId}</Text><Text style={s.title}>{source?.passage.meetingTitle}</Text>{source?.passage.revisionId ? <Text style={s.muted}>Immutable source revision {source.passage.revisionId.slice(0, 12)} · original offsets {source.passage.start}–{source.passage.end}</Text> : null}<Text style={s.muted}>{source?.passage.date} · Speaker labels are exactly as supplied.</Text>
-        {source?.passage.transcriptSource ? <Text style={s.muted}>Source: {source.passage.transcriptSource.kind === 'diarized_audio' ? 'diarized audio version' : source.passage.transcriptSource.kind === 'live' ? 'saved live transcript' : 'saved-audio transcription'} · {source.passage.transcriptSource.status}</Text> : null}
+        {source?.passage.transcriptSource ? <Text style={s.muted}>Source: {source.passage.transcriptSource.kind === 'diarized_audio' ? 'diarized audio version' : source.passage.transcriptSource.kind === 'live_speakers' ? 'Deepgram live speaker transcript' : source.passage.transcriptSource.kind === 'live' ? 'saved live transcript' : 'saved-audio transcription'} · {source.passage.transcriptSource.status}</Text> : null}
         <Panel><Text selectable style={s.body}>{source && quoteIndex >= 0 ? <>{source.passage.text.slice(0, quoteIndex)}<Text style={s.quote}>{source.quote}</Text>{source.passage.text.slice(quoteIndex + source.quote!.length)}</> : source?.passage.text}</Text></Panel>
         {source?.passage.segments?.map(segment => {
           const speaker = source.passage.speakers?.find(speaker => speaker.id === segment.speakerId);
@@ -189,7 +191,7 @@ export function MeetingMemoryScreen({ active, onExit, recordingImport, diarizedI
             <Text style={s.body}>{speaker ? `${speaker.label}${speaker.nameConfirmation ? ` → ${speaker.nameConfirmation.name} (user confirmed)` : ''}` : 'Speaker unidentified'}</Text>
             {speaker?.nameConfirmation ? <Text style={s.muted}>Name confirmed: {speaker.nameConfirmation.confirmedAt}</Text> : null}
             {segment.attribution ? <Text style={s.muted}>Attribution source: {segment.attribution.replaceAll('_', ' ')}</Text> : null}
-            {segment.audio ? <Text selectable style={s.muted}>Audio reference: {segment.audio.recordingId} · {segment.audio.startMs}–{segment.audio.endMs} ms · {segment.audio.timingSource.replaceAll('_', ' ')}. Audio seeking is not connected yet.</Text> : <Text style={s.muted}>No audio timing supplied.</Text>}
+            {segment.audio ? <Text selectable style={s.muted}>Audio reference: {segment.audio.recordingId} · {segment.audio.startMs}–{segment.audio.endMs} ms · {segment.audio.timingSource.replaceAll('_', ' ')}. Audio seeking is not connected yet.</Text> : <Text style={s.muted}>{segment.providerStream ? `Provider stream ${segment.providerStream.startMs}–${segment.providerStream.endMs} ms. No verified saved-file alignment.` : 'No audio timing supplied.'}</Text>}
           </Panel>;
         })}
       </ScrollView></SafeAreaView>

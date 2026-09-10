@@ -12,6 +12,9 @@ export function RecordingTimer({ durationMillis, isRecording }: RecordingTimerPr
   return (
     <Text
       accessibilityLabel={`Elapsed recording time ${formatDuration(durationMillis)}`}
+      adjustsFontSizeToFit
+      numberOfLines={1}
+      minimumFontScale={0.6}
       style={[styles.timer, isRecording && styles.activeTimer]}
     >
       {formatDuration(durationMillis)}
@@ -22,12 +25,12 @@ export function RecordingTimer({ durationMillis, isRecording }: RecordingTimerPr
 const styles = StyleSheet.create({
   timer: {
     color: colors.ink,
-    fontSize: 52,
-    fontWeight: '300',
+    fontSize: 46,
+    fontWeight: '600',
     fontVariant: ['tabular-nums'],
-    letterSpacing: -2.2,
+    letterSpacing: -1.5,
   },
   activeTimer: {
-    color: colors.danger,
+    color: colors.ink,
   },
 });

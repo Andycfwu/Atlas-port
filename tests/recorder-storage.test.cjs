@@ -159,3 +159,48 @@ test('diarization save/reopen and retry cannot overwrite live, post, audio or ex
   assert.ok(files.has(recording.uri));
   await assert.rejects(storage.saveDiarizationJob(recording.id, { id: result.id, recordingId: 'wrong', status: 'ready', result }), /does not match/);
 });
+
+test('experimental live speaker versions survive file-backed reopen, rename, post and diarization updates without modifying audio', async () => {
+  const { storage, recording, files } = await savedFixture();
+  const speakers = { id: 'session-1:deepgram-live', schemaVersion: 1, source: 'live_speakers', provider: 'deepgram', recorderSessionId: 'session-1',
+    status: 'failed', errorMessage: 'Finalization timed out', savedAt: '2026-09-10T00:00:00Z', text: '  Quiet speaker.\n',
+    sessions: [{ connectionId: 'dg-test', timebase: 'provider-stream', audioOffsetMs: null }],
+    finalResults: [{ id: 'dg-test:r0', text: '  Quiet speaker.\n', passages: [{ id: 'dg-test:r0:p0', speakerId: 'dg-test:speaker1', startMs: 20, endMs: 200 }] }],
+    provisionalResults: [{ id: 'dg-test:r1', text: 'unfinished' }] };
+  recording.liveSpeakerTranscripts = [speakers];
+  const audioBefore = JSON.stringify(files.get(recording.uri));
+  storage.preserveLiveSpeakerTranscript('session-1', speakers); await storage.saveRecordingMetadata(recording);
+  await storage.updateRecordingTranscription(recording.id, 'transcribing', null, 'post');
+  await storage.updateRecordingTranscription(recording.id, 'complete', 'A different post transcript', 'post');
+  const diarized = { id: 'identified', recordingId: recording.id, originalTranscript: 'Different diarized text', segments: [], speakers: [] };
+  await storage.saveDiarizationJob(recording.id, { id: diarized.id, recordingId: recording.id, status: 'ready', error: null, result: diarized });
+  await storage.renameRecording(recording.id, 'Renamed');
+  const [reopened] = await storage.loadRecordings();
+  assert.deepEqual(reopened.liveSpeakerTranscripts, [speakers]); assert.deepEqual(reopened.liveTranscript, liveSource);
+  assert.equal(reopened.postTranscripts[0].text, 'A different post transcript'); assert.deepEqual(reopened.diarizedTranscripts, [diarized]);
+  assert.equal(JSON.stringify(files.get(recording.uri)), audioBefore);
+  assert.deepEqual(JSON.parse(files.get('file:///documents/atlas-recording-recovery/session-1.live-speakers.json').text), speakers);
+});
+
+test('distinct provider word and passage IDs survive recording metadata/recovery reopen and post-transcription', { timeout: 2000 }, async () => {
+  const { normalizeResult, DEEPGRAM_CONFIG } = await import('../server/deepgram/protocol.mjs');
+  const { storage, recording, files } = await savedFixture();
+  const text = 'Alpha beta gamma alpha', ids = [0, 1, 2, 0];
+  const result = normalizeResult({ type: 'Results', start: 0, duration: 1, channel_index: [0, 1], is_final: true,
+    channel: { alternatives: [{ transcript: text, words: text.split(' ').map((word, i) => ({ word, start: i / 10, end: (i + 1) / 10, speaker: ids[i] })) }] } }, 'dg-persist', 1000);
+  const source = load('src/features/recorder/recorder.transcripts.ts');
+  const saved = source.savedLiveSpeakerSource({ provider: 'deepgram', status: 'completed', errorMessage: null, speakerSnapshot: {
+    sessions: [{ connectionId: 'dg-persist', provider: 'deepgram', sampleRate: 24000, configuration: DEEPGRAM_CONFIG, timebase: 'provider-stream', audioOffsetMs: null }],
+    finalResults: [result], provisionalResults: [], text,
+  } }, 'session-1');
+  const audioBefore = JSON.stringify(files.get(recording.uri));
+  recording.liveSpeakerTranscripts = [saved]; storage.preserveLiveSpeakerTranscript('session-1', saved);
+  await storage.saveRecordingMetadata(recording);
+  await storage.updateRecordingTranscription(recording.id, 'complete', 'Separate post version', 'post-id-check');
+  const [reopened] = await storage.loadRecordings();
+  assert.deepEqual(reopened.liveSpeakerTranscripts, [saved]);
+  assert.deepEqual(reopened.liveSpeakerTranscripts[0].finalResults[0].words.map(w => w.providerSpeaker), ids);
+  assert.deepEqual(reopened.liveSpeakerTranscripts[0].finalResults[0].passages.map(p => p.speakerId), ids.map(id => `dg-persist:speaker${id}`));
+  assert.deepEqual(JSON.parse(files.get('file:///documents/atlas-recording-recovery/session-1.live-speakers.json').text), saved);
+  assert.equal(JSON.stringify(files.get(recording.uri)), audioBefore); assert.deepEqual(reopened.liveTranscript, liveSource);
+});

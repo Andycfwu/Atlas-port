@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, existsSync, rmSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
+const uploadAudio = await readFile(new URL('../tests/fixtures/upload-synthetic-silence.m4a', import.meta.url));
+const syntheticCleanup = { cleanupUpload: file => unlink(file.path).catch(() => {}) };
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MeetingStore } from './memory/store.mjs';
@@ -59,13 +61,13 @@ test('job retries reuse one audio version, preserve byte identity, and survive d
   const upload = index => { const path = join(directory, `${index}.m4a`); writeFileSync(path, 'audio12'); return { path, originalname: 'synthetic.m4a', size: 7 }; };
   const provider = async file => { calls++; assert.equal((await readFile(file.path)).toString(), 'audio12'); return { data: raw(), requestId: 'provider-request' }; };
   try {
-    let service = new DiarizationService(store.db, provider);
+    let service = new DiarizationService(store.db, provider, syntheticCleanup);
     const file = upload(1), start = await service.start(file, metadata);
     await service.jobs.get(start.id);
     assert.equal(existsSync(file.path), false, 'only temporary upload is removed');
     const duplicate = await service.start(upload(2), metadata);
     assert.equal(calls, 1); assert.equal(duplicate.id, start.id); assert.equal(duplicate.status, 'ready');
-    store.close(); store = new MeetingStore(filename); service = new DiarizationService(store.db, provider);
+    store.close(); store = new MeetingStore(filename); service = new DiarizationService(store.db, provider, syntheticCleanup);
     assert.equal(service.get(start.id).result.providerRequestId, 'provider-request');
     assert.equal((await service.start(upload(3), metadata)).id, start.id);
     assert.equal(calls, 1);
@@ -120,16 +122,17 @@ test('meeting names persist, corrections create idempotent source versions and p
     store.saveAnswer({ id: 'old-answer', statements: [], sources: oldSources });
     const names = [{ speakerId: v.speakers[0].id, name: 'Mike' }];
     const named = reviseMeetingSpeakers(store, anonymous.id, names).meeting;
-    assert.notEqual(named.id, anonymous.id);
+    assert.equal(named.id, anonymous.id);
+    assert.notEqual(named.desiredRevisionId, anonymous.revisionId);
     assert.equal(reviseMeetingSpeakers(store, anonymous.id, names).meeting.id, named.id);
     assert.equal(store.get(anonymous.id).speakers[0].nameConfirmation, null);
     assert.deepEqual(store.chunks(anonymous.id), oldChunks);
-    assert.equal(store.questionMeetings(filters).some(m => m.id === anonymous.id), false);
+    assert.equal(store.questionMeetings(filters).some(m => m.id === anonymous.id), true, "previous source remains searchable until publication");
     const corrected = reviseMeetingSpeakers(store, named.id, [{ speakerId: v.speakers[0].id, name: 'Andy' }]).meeting;
     assert.equal(corrected.originalTranscript, anonymous.originalTranscript);
     assert.deepEqual(corrected.segments, anonymous.segments);
     store.close(); store = new MeetingStore(filename);
-    assert.equal(store.get(corrected.id).speakers[0].nameConfirmation.name, 'Andy');
+    assert.equal(store.versions.revision(corrected.id, corrected.desiredRevisionId).speakers[0].nameConfirmation.name, 'Andy');
     assert.equal(store.answers()[0].sources[0].speakers[0].nameConfirmation, null);
     assert.equal(store.questionMeetings(filters).filter(m => m.transcriptSource?.kind === 'diarized_audio').length, 1);
     const cleared = reviseMeetingSpeakers(store, corrected.id, [{ speakerId: v.speakers[0].id, name: null }]).meeting;
@@ -153,8 +156,9 @@ test('speaker-specific citations require the selected segment, anonymous or user
     assert.throws(() => validateAnswer(answer({ ...citation, segmentId: v.segments[1].id }), sources), /verified/);
     assert.throws(() => validateAnswer(answer({ ...citation, quote: v.segments[2].text }), sources), /verified/);
     const named = reviseMeetingSpeakers(store, meeting.id, [{ speakerId: v.speakers[0].id, name: 'Mike' }]).meeting;
-    const namedSources = retrieve([{ ...named, status: 'ready' }], () => contextualChunks(named).map(c => ({ ...c, embedding: [1,0] })), 'property', [1,0], filters).sources;
-    const confirmed = { ...citation, meetingId: named.id, speaker: 'Mike' };
+    const namedRevision = store.versions.revision(named.id, named.desiredRevisionId);
+    const namedSources = retrieve([{ ...named, ...namedRevision, id: named.id, passages: namedRevision.units, status: 'ready' }], () => contextualChunks({ ...named, ...namedRevision, id: named.id, passages: namedRevision.units }).map(c => ({ ...c, embedding: [1,0] })), 'property', [1,0], filters).sources;
+    const confirmed = { ...citation, passageId: namedSources[0].passageId, meetingId: named.id, speaker: 'Mike' };
     assert.equal(validateAnswer(answer(confirmed), namedSources, 'What did Mike say?').status, 'answered');
   } finally { store.close(); }
 });
@@ -179,17 +183,17 @@ test('HTTP multipart → job → explicit diarized intake → name correction pr
   const { createMemoryRouter } = await import('./memory/router.mjs');
   const store = new MeetingStore(':memory:');
   let calls = 0;
-  const service = new DiarizationService(store.db, async file => { calls++; assert.equal((await readFile(file.path)).toString(), 'audio12'); return { data: raw() }; });
+  const service = new DiarizationService(store.db, async file => { calls++; assert.deepEqual(await readFile(file.path), uploadAudio); return { data: raw() }; });
   const app = express(); app.use('/v1/diarizations', createDiarizationRouter(service));
   app.use('/v1/memory', createMemoryRouter(new MeetingMemoryService(store, {}), service));
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const form = () => { const f = new FormData(); f.append('file', new Blob(['audio12'], { type: 'audio/mp4' }), 'synthetic.m4a'); f.append('recordingId', metadata.recordingId); f.append('durationMillis', '10000'); return f; };
+  const form = () => { const f = new FormData(); f.append('file', new Blob([uploadAudio], { type: 'audio/mp4' }), 'synthetic.m4a'); f.append('recordingId', metadata.recordingId); f.append('durationMillis', '10000'); return f; };
   const post = async (path, body) => fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   try {
     const invalid = await fetch(base + '/v1/diarizations', { method: 'POST', headers: { 'X-Atlas-Audio-Bytes': '100' }, body: form() });
     assert.equal(invalid.status, 400); assert.equal(calls, 0);
-    const created = await fetch(base + '/v1/diarizations', { method: 'POST', headers: { 'X-Atlas-Audio-Bytes': '7' }, body: form() });
+    const created = await fetch(base + '/v1/diarizations', { method: 'POST', headers: { 'X-Atlas-Audio-Bytes': String(uploadAudio.length) }, body: form() });
     assert.equal(created.status, 202); const job = await created.json(); await service.jobs.get(job.id);
     const ready = await (await fetch(base + '/v1/diarizations/' + job.id)).json();
     assert.equal(ready.status, 'ready');
@@ -197,9 +201,10 @@ test('HTTP multipart → job → explicit diarized intake → name correction pr
     assert.equal(imported.meeting.originalTranscript, ready.result.originalTranscript);
     assert.equal(imported.meeting.speakers[0].nameConfirmation.name, 'Mike');
     const fixed = await (await post(`/v1/memory/meetings/${imported.meeting.id}/speakers`, { speakerNames: [{ speakerId: ready.result.speakers[0].id, name: 'Andy' }] })).json();
-    assert.notEqual(fixed.meeting.id, imported.meeting.id);
+    assert.equal(fixed.meeting.id, imported.meeting.id);
+    assert.notEqual(fixed.meeting.desiredRevisionId, imported.meeting.revisionId);
     assert.equal(store.get(imported.meeting.id).speakers[0].nameConfirmation.name, 'Mike');
-    assert.equal(fixed.meeting.speakers[0].nameConfirmation.name, 'Andy');
+    assert.equal(store.versions.revision(fixed.meeting.id, fixed.meeting.desiredRevisionId).speakers[0].nameConfirmation.name, 'Andy');
     const spoofed = await post('/v1/memory/meetings', { ...details, originalTranscript: 'Speaker 1: fake', transcriptSource: imported.meeting.transcriptSource });
     assert.equal(spoofed.status, 400);
   } finally { await new Promise(resolve => server.close(resolve)); store.close(); }

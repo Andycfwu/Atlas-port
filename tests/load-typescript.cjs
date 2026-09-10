@@ -7,7 +7,7 @@ const ts = require('typescript');
 exports.load = (relativePath, mocks = {}, globals = {}) => {
   const filename = path.resolve(__dirname, '..', relativePath);
   const { outputText } = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   });
   const exported = {};
   const localRequire = (name) => {

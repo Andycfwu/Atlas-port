@@ -19,7 +19,8 @@ export function validateFilters(filters = {}) {
   const { meetingIds = [], participant = '', dateFrom = '', dateTo = '' } = filters;
   if (!Array.isArray(meetingIds) || meetingIds.length > 100 || meetingIds.some(id => typeof id !== 'string' || id.length > 100)) throw new MemoryError('Invalid meeting selection.');
   if (typeof participant !== 'string' || participant.length > 100 || typeof dateFrom !== 'string' || typeof dateTo !== 'string' || (dateFrom && !validDate(dateFrom)) || (dateTo && !validDate(dateTo)) || (dateFrom && dateTo && dateFrom > dateTo)) throw new MemoryError('Use valid participant and YYYY-MM-DD date filters, with From no later than To.');
-  return { meetingIds, participant: participant.trim(), dateFrom, dateTo };
+  if (filters.revisionId !== undefined && (meetingIds.length !== 1 || typeof filters.revisionId !== 'string' || !/^[a-f0-9]{64}$/.test(filters.revisionId))) throw new MemoryError('Select exactly one meeting for an explicit transcript revision.');
+  return { ...(filters.revisionId ? { revisionId: filters.revisionId } : {}), meetingIds, participant: participant.trim(), dateFrom, dateTo };
 }
 export function matchesFilters(meeting, filters) {
   return (!filters.meetingIds.length || filters.meetingIds.includes(meeting.id))

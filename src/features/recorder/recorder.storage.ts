@@ -667,6 +667,12 @@ export function preserveLiveTranscript(sessionId: string, transcript: SavedLiveT
   directory.create({ intermediates: true, idempotent: true });
   new File(directory, `${sessionId}.live.json`).write(JSON.stringify(transcript));
 }
+export function preserveLiveSpeakerTranscript(sessionId: string, transcript: import('./live-speakers/live-speakers.model').SavedLiveSpeakerTranscript | null): void {
+  if (!transcript) return;
+  const directory = new Directory(Paths.document, 'atlas-recording-recovery');
+  directory.create({ intermediates: true, idempotent: true });
+  new File(directory, `${sessionId}.live-speakers.json`).write(JSON.stringify(transcript));
+}
 
 export const saveDiarizationJob = (recordingId: string, job: DiarizationJob): Promise<SavedRecording> => serializeMetadata(async () => {
   const recordings = await readRecordingsForMutation();

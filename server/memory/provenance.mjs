@@ -26,8 +26,15 @@ export function validateProvenance(input, original) {
     segmentIds.add(s.id);
     const speakerId = s.speakerId ?? null, attribution = s.attribution ?? null, audio = s.audio ?? null;
     if (speakerId !== null && !ids.has(speakerId)) invalid();
-    if (speakerId === null ? attribution !== null : !['transcript_label', 'diarization', 'user_confirmed'].includes(attribution)) invalid();
+    if (speakerId === null ? attribution !== null : !['transcript_label', 'diarization', 'stream_diarization', 'user_confirmed'].includes(attribution)) invalid();
     if (audio !== null && (!identifier(audio.recordingId) || !Number.isFinite(audio.startMs) || !Number.isFinite(audio.endMs) || audio.startMs < 0 || audio.endMs <= audio.startMs || !['transcription', 'alignment', 'user_confirmed'].includes(audio.timingSource))) invalid();
+    let providerStream;
+    if (s.providerStream !== undefined) {
+      const stream = s.providerStream;
+      if (input.transcriptSource?.kind !== 'live_speakers' || !stream || !/^dg-[a-zA-Z0-9-]{1,80}$/.test(stream.connectionId) || !Number.isFinite(stream.startMs) || !Number.isFinite(stream.endMs) || stream.startMs < 0 || stream.endMs < stream.startMs || (speakerId && !speakerId.startsWith(stream.connectionId + ':speaker'))) invalid();
+      providerStream = { connectionId: stream.connectionId, startMs: stream.startMs, endMs: stream.endMs };
+    }
+    if (attribution === 'stream_diarization' && (!providerStream || audio)) invalid();
     if (attribution === 'diarization' && !audio) invalid();
     if (attribution === 'transcript_label') {
       const speaker = cleanSpeakers.find(p => p.id === speakerId);
@@ -38,7 +45,7 @@ export function validateProvenance(input, original) {
     if (s.attributionStatus !== undefined && !['speaker', 'unknown', 'overlap'].includes(s.attributionStatus)) invalid();
     if (s.providerOverlap !== undefined && s.providerOverlap !== null && typeof s.providerOverlap !== 'boolean') invalid();
     if (s.providerSpeaker !== undefined && s.providerSpeaker !== null && (typeof s.providerSpeaker !== 'string' || s.providerSpeaker.length > 100)) invalid();
-    return { ...(s.attributionStatus !== undefined ? { attributionStatus: s.attributionStatus, providerSpeaker: s.providerSpeaker ?? null, providerOverlap: s.providerOverlap ?? null } : {}), id: s.id, start: s.start, end: s.end, speakerId, attribution, audio: audio && { recordingId: audio.recordingId, startMs: audio.startMs, endMs: audio.endMs, timingSource: audio.timingSource } };
+    return { ...(providerStream ? { providerStream } : {}), ...(s.attributionStatus !== undefined ? { attributionStatus: s.attributionStatus, providerSpeaker: s.providerSpeaker ?? null, providerOverlap: s.providerOverlap ?? null } : {}), id: s.id, start: s.start, end: s.end, speakerId, attribution, audio: audio && { recordingId: audio.recordingId, startMs: audio.startMs, endMs: audio.endMs, timingSource: audio.timingSource } };
   });
   // Different speech segments cannot silently assign the same text to different voices.
   const sorted = [...cleanSegments].sort((a, b) => a.start - b.start);
@@ -63,7 +70,7 @@ export function supportsSpeaker(source, quote, name, segmentId = null) {
     const excerpt = source.text.slice(Math.max(0, segment.start - source.start), Math.min(source.text.length, segment.end - source.start));
     return excerpt.includes(quote);
   }
-  if (source.transcriptSource?.kind === 'diarized_audio') return false;
+  if (['diarized_audio', 'live_speakers'].includes(source.transcriptSource?.kind)) return false;
   return source.text.split(/\r?\n/).some((line, index) => {
     if (index === 0 && source.start > 0 && source.startsAtLineBoundary !== true) return false;
     return labelPattern(name).test(line.trimStart()) && line.includes(quote) && labelPattern(name).test(quote.trimStart());

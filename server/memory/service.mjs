@@ -78,7 +78,7 @@ export class MeetingMemoryService {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120_000);
     try {
-      const meetings = this.store.questionMeetings(filters);
+      const meetings = filters.revisionId ? [this.store.versions.consult(filters.meetingIds[0], filters.revisionId)] : this.store.questionMeetings(filters);
       const ready = meetings.filter(m => (m.publishedGenerationId || m.status === 'ready') && matchesFilters(m, filters));
       let result = { status: 'insufficient_evidence', clarification: null, statements: [] };
       let sources = [], truncated = false;
@@ -87,11 +87,11 @@ export class MeetingMemoryService {
       if (ambiguousLabel) result = { status: 'clarification', scope: 'speaker', requestedSpeaker: target, limitation: 'Anonymous labels are local to each meeting, not shared identities.', clarification: 'Which meeting do you mean? Select one meeting before asking about an anonymous speaker.', statements: [] };
       if (ready.length && !ambiguousLabel) {
         if (ready.some(m => { const config = this.store.versions.generation(m.id, m.publishedGenerationId).config.embedding; return JSON.stringify(config) !== JSON.stringify(embeddingConfig(this.provider)); })) throw new MemoryError('The embedding model changed. Reprocess the selected meetings before asking questions.', 409, 'MEMORY_REINDEX_REQUIRED');
-        const hasIndex = ready.some(m => this.store.chunks(m.id).length);
+        const hasIndex = ready.some(m => this.store.versions.chunks(m.id, m.publishedGenerationId).length);
         const queryVectors = hasIndex ? await this.provider.embed([question], controller.signal) : [];
         if (hasIndex) validateVectors(queryVectors, 1, this.provider.dimensions ?? 512);
         const vector = queryVectors[0] ?? [];
-        const retrieved = retrieve(ready, id => this.store.chunks(id), question, vector, filters);
+        const retrieved = retrieve(ready, id => this.store.versions.chunks(id, ready.find(m => m.id === id).publishedGenerationId), question, vector, filters);
         sources = retrieved.sources; truncated = retrieved.truncated;
         if (sources.length) {
           const raw = await this.provider.answer(question, sources, controller.signal);
@@ -102,6 +102,8 @@ export class MeetingMemoryService {
           }
         }
       }
+      const alternatives = ready.some(m => this.store.versions.list(m.id).some(r => r.id !== m.revisionId && this.store.versions.revision(m.id, r.id).contentHash !== this.store.versions.revision(m.id, m.revisionId).contentHash));
+      if (alternatives) result.limitation = [result.limitation, 'Alternative transcript versions have different wording. This answer uses only the selected published source; other versions were not merged or treated as corroboration. Consult them separately to check discrepancies.'].filter(Boolean).join(' ');
       for (const statement of result.statements) for (const citation of statement.citations) {
         const source = sources.find(s => s.meetingId === citation.meetingId && s.passageId === citation.passageId);
         citation.revisionId = source.revisionId; citation.generationId = source.generationId;

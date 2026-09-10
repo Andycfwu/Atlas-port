@@ -1,5 +1,6 @@
 import { RelationalMemory } from '../storage/relational.mjs';
-import { readFile, unlink } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import { claimAudioUpload, cleanupAudioUpload } from '../audio-upload.mjs';
 import { createReadStream } from 'node:fs';
 import { toFile } from 'openai';
 import { digest, MemoryError } from '../memory/transcript.mjs';
@@ -8,8 +9,9 @@ import { DEVELOPMENT_USER } from '../memory/store.mjs';
 import { DIARIZATION_MODEL, resultId, validateAudioInput, validateDiarizedResult } from './result.mjs';
 
 export class DiarizationService {
-  constructor(db, provider) {
+  constructor(db, provider, { cleanupUpload = cleanupAudioUpload } = {}) {
     this.db = db; this.provider = provider; this.jobs = new Map();
+    this.cleanupUpload = cleanupUpload;
     this.repo = new RelationalMemory(db);
     for (const { id } of db.prepare('SELECT id FROM diarizations WHERE user_id=?').all(DEVELOPMENT_USER)) {
       const job = this.repo.diarization(id);
@@ -32,13 +34,14 @@ export class DiarizationService {
       const previous = this.repo.diarization(id);
       if (previous?.status === 'ready' || this.jobs.has(id)) return this.get(id);
       if (this.jobs.size >= 2) throw new MemoryError('Two recordings are already identifying speakers. Wait and retry.', 429);
+      claimAudioUpload(file);
       const job = this.put({ id, recordingId: metadata.recordingId, status: 'processing', error: null,
         attempts: (previous?.attempts ?? 0) + 1, result: previous?.result ?? null, createdAt: previous?.createdAt ?? new Date().toISOString() });
       const input = { ...metadata, id, byteSize: file.size, audioSha256 };
       const work = this.process(file, input).finally(() => this.jobs.delete(id));
       this.jobs.set(id, work); ownsUpload = false;
       return job;
-    } finally { if (ownsUpload) await unlink(file.path).catch(() => {}); }
+    } finally { if (ownsUpload) await this.cleanupUpload(file); }
   }
   async process(file, input) {
     const controller = new AbortController();
@@ -50,7 +53,7 @@ export class DiarizationService {
     } catch (error) {
       const safe = safeMemoryError(error);
       this.put({ ...this.get(input.id), status: 'failed', error: safe.message });
-    } finally { clearTimeout(timer); await unlink(file.path).catch(() => {}); }
+    } finally { clearTimeout(timer); await this.cleanupUpload(file); }
   }
 }
 export const openAIDiarizationProvider = client => async (file, signal) => {

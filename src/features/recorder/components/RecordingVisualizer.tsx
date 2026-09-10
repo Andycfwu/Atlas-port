@@ -47,12 +47,12 @@ export function RecordingVisualizer({
 
 const styles = StyleSheet.create({
   visualizer: {
-    height: 48,
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    marginVertical: 16,
+    marginVertical: 6,
   },
   bar: {
     width: 4,
@@ -61,6 +61,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   activeBar: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.accentBright,
   },
 });

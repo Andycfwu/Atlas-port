@@ -11,7 +11,6 @@ import {
   View,
 } from 'react-native';
 
-import { AppHeader } from '../../components/AppHeader';
 import { Screen } from '../../components/Screen';
 import { colors } from '../../config/theme';
 import type { SavedRecording } from './recorder.types';
@@ -91,10 +90,11 @@ export function RecordingDetailScreen({
   }
 
   const isActive = activeRecordingId === recording.id;
+  const isThisPlaying = isActive && isPlaying;
   const displayedPosition = isActive ? currentTimeMillis : 0;
   const displayedDuration = isActive ? durationMillis : recording.durationMillis;
   const isPlayerReady = isActive && isLoaded && displayedDuration > 0;
-  const playerLabel = isPlaying
+  const playerLabel = isThisPlaying
     ? 'Pause'
     : phase === 'loading' && isActive
       ? 'Loading…'
@@ -194,8 +194,6 @@ export function RecordingDetailScreen({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <AppHeader badge="LOCAL AUDIO" product="ATLAS MOBILE" />
-
         <Pressable
           accessibilityLabel="Back to saved recordings"
           accessibilityRole="button"
@@ -207,7 +205,7 @@ export function RecordingDetailScreen({
         </Pressable>
 
         <View style={styles.intro}>
-          <Text style={styles.eyebrow}>RECORDING DETAIL</Text>
+          <Text style={styles.eyebrow}>REALTORCH · SAVED AUDIO</Text>
           <Text style={styles.title}>{recording.title}</Text>
           <View style={styles.metadataRow}>
             <Text style={styles.metadata}>{formatRecordingDate(recording.createdAt)}</Text>
@@ -218,8 +216,8 @@ export function RecordingDetailScreen({
 
         <View style={styles.playerCard}>
           <View style={styles.playerStatusRow}>
-            <View style={[styles.statusDot, isPlaying && styles.playingDot]} />
-            <Text style={[styles.statusText, isPlaying && styles.playingText]}>
+            <View style={[styles.statusDot, isThisPlaying && styles.playingDot]} />
+            <Text style={[styles.statusText, isThisPlaying && styles.playingText]}>
               {statusLabel}
             </Text>
           </View>
@@ -250,7 +248,7 @@ export function RecordingDetailScreen({
             <View style={styles.playbackMark}>
               {phase === 'loading' && isActive ? (
                 <ActivityIndicator color={colors.white} size="small" />
-              ) : isPlaying ? (
+              ) : isThisPlaying ? (
                 <View style={styles.pauseMark}>
                   <View style={styles.pauseBar} />
                   <View style={styles.pauseBar} />
@@ -290,21 +288,21 @@ export function RecordingDetailScreen({
         ) : null}
 
         <View style={styles.actionSection}>
-          <Text style={styles.sectionEyebrow}>RECORDING ACTIONS</Text>
+          <Text style={styles.sectionEyebrow}>PUT THIS CONVERSATION TO WORK</Text>
           <View style={styles.actionList}>
-            <DetailAction label="Add to Meeting Memory" meta={preferredTranscript(recording)?.source === 'live' ? 'USE SAVED LIVE TEXT' : 'USE SAVED-AUDIO TRANSCRIPT'} onPress={() => {
-              if (preferredTranscript(recording)) { void pause(); onMeetingMemory(recording); }
+            <DetailAction featured label="Add to Meeting Memory" meta={preferredTranscript(recording)?.source === 'live' ? 'Review the live draft, then explore next steps' : 'Review the transcript, then explore next steps'} onPress={() => {
+              if (preferredTranscript(recording) || recording.liveSpeakerTranscripts?.some(v => v.text.trim())) { void pause(); onMeetingMemory(recording); }
               else setActionError('No transcript is available yet. Use Transcribe Recording below, then add it to Meeting Memory.');
             }} />
             <DetailAction
               label="Rename"
-              meta="EDIT DISPLAY TITLE"
+              meta="Give this conversation a useful name"
               onPress={() => setIsRenameVisible(true)}
             />
             <DetailAction
               busy={isSharing}
               label="Share / Export"
-              meta="OPEN SYSTEM SHARE SHEET"
+              meta="Share the original audio file"
               onPress={() => {
                 void handleShare();
               }}
@@ -313,7 +311,7 @@ export function RecordingDetailScreen({
               busy={isDeleting}
               destructive
               label="Delete Recording"
-              meta="REMOVE LOCAL AUDIO"
+              meta="Permanently remove this recording"
               onPress={confirmDelete}
             />
           </View>
@@ -339,6 +337,7 @@ export function RecordingDetailScreen({
 }
 
 interface DetailActionProps {
+  featured?: boolean;
   busy?: boolean;
   destructive?: boolean;
   label: string;
@@ -347,6 +346,7 @@ interface DetailActionProps {
 }
 
 function DetailAction({
+  featured = false,
   busy = false,
   destructive = false,
   label,
@@ -361,6 +361,7 @@ function DetailAction({
       onPress={onPress}
       style={({ pressed }) => [
         styles.detailAction,
+        featured && styles.featuredAction,
         destructive && styles.destructiveAction,
         pressed && styles.pressed,
         busy && styles.disabled,
@@ -392,7 +393,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 520,
     alignSelf: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: 34,
   },
@@ -401,7 +402,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: 24,
+    marginTop: 0,
+    minHeight: 44,
     paddingVertical: 5,
     paddingRight: 10,
   },
@@ -429,10 +431,10 @@ const styles = StyleSheet.create({
   title: {
     marginTop: 7,
     color: colors.ink,
-    fontSize: 33,
+    fontSize: 28,
     fontWeight: '800',
     letterSpacing: -1,
-    lineHeight: 39,
+    lineHeight: 35,
   },
   metadataRow: {
     flexDirection: 'row',
@@ -460,7 +462,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     shadowColor: colors.ink,
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.035,
     shadowRadius: 22,
     elevation: 4,
   },
@@ -611,6 +613,7 @@ const styles = StyleSheet.create({
   destructiveAction: {
     borderColor: colors.dangerSoft,
   },
+  featuredAction: { backgroundColor: colors.sageSoft, borderColor: '#D9E5D9' },
   actionMonogram: {
     width: 38,
     height: 38,
@@ -639,9 +642,9 @@ const styles = StyleSheet.create({
   detailActionMeta: {
     marginTop: 3,
     color: colors.mutedInk,
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.8,
+    fontSize: 10,
+    lineHeight: 16,
+    fontWeight: '400',
   },
   actionChevron: {
     marginRight: 3,

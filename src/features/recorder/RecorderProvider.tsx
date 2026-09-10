@@ -57,13 +57,15 @@ import {
   persistVerifiedRecordingFile,
   preserveRecordingRecoveryReport,
   preserveLiveTranscript,
+  preserveLiveSpeakerTranscript,
   removePersistedRecordingSource,
   renameRecording as renameStoredRecording,
   saveRecordingMetadata,
   saveDiarizationJob,
   updateRecordingTranscription,
 } from './recorder.storage';
-import { savedLiveSource } from './recorder.transcripts';
+import { savedLiveSource, savedLiveSpeakerSource } from './recorder.transcripts';
+import type { LiveProvider, SavedLiveSpeakerTranscript } from './live-speakers/live-speakers.model';
 import { transcribeRecordingFile } from './recording-transcription.service';
 import type {
   MicrophonePermissionState,
@@ -73,6 +75,8 @@ import type {
 } from './recorder.types';
 
 interface RecorderContextValue {
+  liveProvider: LiveProvider;
+  selectLiveProvider: (provider: LiveProvider) => void;
   persistDiarization: (recordingId: string, job: DiarizationJob) => Promise<void>;
   clearError: () => void;
   deleteRecording: (recordingId: string) => Promise<void>;
@@ -233,6 +237,7 @@ const waitForNativeRecordingConfirmation = async (
 };
 
 export function RecorderProvider({ children }: PropsWithChildren) {
+  const [liveProvider, setLiveProvider] = useState<LiveProvider>('openai');
   const {
     finishMicrophoneRecording,
     prepareMicrophoneRecording,
@@ -274,6 +279,11 @@ export function RecorderProvider({ children }: PropsWithChildren) {
   } = useLiveTranscription();
   const { stream } = useAudioStream({ channels: 1, encoding: 'int16', sampleRate: 24_000, onBuffer: sendLiveAudio });
   const pcmCapture = useMemo(() => new RecorderPcmCapture(stream, () => recorder.isRecording), [recorder, stream]);
+  const selectLiveProvider = useCallback((provider: LiveProvider) => {
+    if (!operationInProgressRef.current && !nativeRecordingConfirmedRef.current && !recorder.isRecording) {
+      resetLiveTranscription(); setLiveProvider(provider);
+    }
+  }, [recorder, resetLiveTranscription]);
   const releasePcmCapture = useCallback(() => {
     try {
       pcmCapture.release();
@@ -629,7 +639,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         });
 
         if (testKind === 'normal' && LIVE_ENABLED) {
-          void startLiveTranscription({ recorderSessionId: session.sessionId, actualSampleRate: liveCaptureRate, captureError: liveCaptureError, forceFailure: FORCE_LIVE_FAILURE });
+          void startLiveTranscription({ recorderSessionId: session.sessionId, actualSampleRate: liveCaptureRate, captureError: liveCaptureError, forceFailure: FORCE_LIVE_FAILURE, provider: liveProvider });
         }
 
         return session;
@@ -666,6 +676,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       recorder,
       restoreSoundPlayback,
       startLiveTranscription,
+      liveProvider,
       stopNativeRecorderOnce,
     ],
   );
@@ -866,13 +877,14 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       sessionId: string,
       sourceValidation: RecordingFileValidation,
       liveTranscript: SavedLiveTranscript | null = null,
+      liveSpeakers: SavedLiveSpeakerTranscript | null = null,
     ) => {
       const persisted = await persistVerifiedRecordingFile(
         sessionId,
         sourceValidation,
       );
 
-      persisted.recording = { ...persisted.recording, liveTranscript };
+      persisted.recording = { ...persisted.recording, liveTranscript, ...(liveSpeakers ? { liveSpeakerTranscripts: [liveSpeakers] } : {}) };
       try {
         await saveRecordingMetadata(persisted.recording);
       } catch (error) {
@@ -976,8 +988,13 @@ export function RecorderProvider({ children }: PropsWithChildren) {
         statusUrlChanged: statusUrlAfterStop !== statusUrlBeforeStop,
       });
 
-      const liveTranscript = session.testKind === 'normal'
-        ? savedLiveSource(await liveFinalization, session.sessionId) : null;
+      const liveSnapshot = await liveFinalization;
+      const liveTranscript = session.testKind === 'normal' ? savedLiveSource(liveSnapshot, session.sessionId) : null;
+      const liveSpeakers = session.testKind === 'normal' ? savedLiveSpeakerSource(liveSnapshot, session.sessionId) : null;
+      if (liveSpeakers) {
+        try { preserveLiveSpeakerTranscript(session.sessionId, liveSpeakers); }
+        catch { console.warn('[RecorderStorage] Speaker recovery copy could not be written; attempting library save.'); }
+      }
       if (liveTranscript) {
         // Independent recovery copy survives a subsequent audio/library save failure.
         try { preserveLiveTranscript(session.sessionId, liveTranscript); }
@@ -1077,6 +1094,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
           session.sessionId,
           sourceValidation,
           liveTranscript,
+          liveSpeakers,
         );
         const persistenceChecks: RecorderIntegrityCheck[] = [
           ...persisted.destinationValidation.checks.filter(
@@ -1121,7 +1139,7 @@ export function RecorderProvider({ children }: PropsWithChildren) {
 
       if (
         session.testKind === 'normal' &&
-        savedRecordingForTranscription
+        savedRecordingForTranscription && !savedRecordingForTranscription.liveSpeakerTranscripts?.length
       ) {
         void transcribeSavedRecording(savedRecordingForTranscription);
       }
@@ -1130,6 +1148,8 @@ export function RecorderProvider({ children }: PropsWithChildren) {
     } catch (error) {
       stopLiveTranscription('recording_save_failed', 'failed');
       const retained = savedLiveSource(getLiveSnapshot(), session.sessionId);
+      try { preserveLiveSpeakerTranscript(session.sessionId, savedLiveSpeakerSource(getLiveSnapshot(), session.sessionId)); }
+      catch { console.warn('[RecorderStorage] Speaker recovery copy could not be written.'); }
       if (retained) {
         try { preserveLiveTranscript(session.sessionId, retained); }
         catch { console.warn('[RecorderStorage] Live recovery copy could not be written.'); }
@@ -1412,6 +1432,8 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       isLoadingRecordings,
       isRecording: nativeRecordingConfirmed,
       liveTranscription,
+      liveProvider,
+      selectLiveProvider,
       metering: nativeRecordingConfirmed ? (recorderState.metering ?? null) : null,
       openSettings: Linking.openSettings,
       permissionState,
@@ -1434,6 +1456,8 @@ export function RecorderProvider({ children }: PropsWithChildren) {
       integrityTestRunning,
       isLoadingRecordings,
       liveTranscription,
+      liveProvider,
+      selectLiveProvider,
       nativeRecordingConfirmed,
       permissionState,
       phase,

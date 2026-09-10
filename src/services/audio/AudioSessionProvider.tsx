@@ -140,11 +140,10 @@ export function AudioSessionProvider({ children }: PropsWithChildren) {
         return false;
       }
 
-      if (modeRef.current === 'playback') {
-        return true;
-      }
-
+      // This ref describes our last request, not the current native session.
+      // iOS/Expo Go can change the shared session between Play/Resume requests.
       logTransition(transitionId, 'playback', request, 'requested');
+      modeRef.current = 'unknown';
       await configurePlaybackAudioMode();
       modeRef.current = 'playback';
       logTransition(transitionId, 'playback', request, 'ready');

@@ -1,0 +1,74 @@
+{
+  "synthetic": true,
+  "sampleRate": 24000,
+  "channels": 1,
+  "encoding": "int16",
+  "referenceStatus": "TTS script; pronunciation and overlap require human listening review",
+  "durationMs": 19256.458333333332,
+  "reference": [
+    {
+      "voice": "Samantha",
+      "text": "The cedar house inspection is Tuesday.",
+      "gain": 1,
+      "startMs": 0,
+      "endMs": 2067,
+      "overlap": false
+    },
+    {
+      "voice": "Daniel",
+      "text": "Yes. The repair budget is forty thousand dollars.",
+      "gain": 1,
+      "startMs": 2567,
+      "endMs": 5785.333333333333,
+      "overlap": false
+    },
+    {
+      "voice": "Karen",
+      "text": "Wait. The roof estimate is uncertain.",
+      "gain": 0.07,
+      "startMs": 6285.333333333333,
+      "endMs": 8663.375,
+      "overlap": false
+    },
+    {
+      "voice": "Samantha",
+      "text": "Okay.",
+      "gain": 1,
+      "startMs": 9163.375,
+      "endMs": 9737.125,
+      "overlap": false
+    },
+    {
+      "voice": "Karen",
+      "text": "Please check the drainage before we sign.",
+      "gain": 0.07,
+      "startMs": 12737.125,
+      "endMs": 14843.708333333334,
+      "overlap": false
+    },
+    {
+      "voice": "Samantha",
+      "text": "Paint the garage blue.",
+      "gain": 0.7,
+      "startMs": 15343.708333333334,
+      "endMs": 16525.041666666668,
+      "overlap": true
+    },
+    {
+      "voice": "Daniel",
+      "text": "Keep the porch white.",
+      "gain": 0.7,
+      "startMs": 15343.708333333334,
+      "endMs": 16529.583333333332,
+      "overlap": true
+    },
+    {
+      "voice": "Daniel",
+      "text": "This is the final sentence before stop.",
+      "gain": 1,
+      "startMs": 17029.583333333332,
+      "endMs": 19256.458333333332,
+      "overlap": false
+    }
+  ]
+}

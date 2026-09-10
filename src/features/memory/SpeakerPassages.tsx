@@ -10,7 +10,7 @@ export function SpeakerPassages({ original, segments, speakers }: { original: st
     const overlaps = segment.audio && segments.some(other => other.id !== segment.id && other.audio && other.audio.startMs < segment.audio!.endMs && other.audio.endMs > segment.audio!.startMs);
     return <View key={segment.id} style={{ borderLeftWidth: 3, borderLeftColor: color, paddingLeft: 12, gap: 5 }}>
       <Text style={[s.label, { color }]}>{speaker ? `${speaker.label}${speaker.nameConfirmation ? ` · ${speaker.nameConfirmation.name} (user confirmed)` : ''}` : segment.attributionStatus === 'overlap' ? 'Overlapping / ambiguous voices' : 'Unknown speaker'}</Text>
-      <Text style={s.muted}>{segment.audio ? `${audioTime(segment.audio.startMs)}–${audioTime(segment.audio.endMs)}` : 'Timing not supplied'}{overlaps ? ' · Timing overlaps another passage' : ''}{segment.providerOverlap === true ? ' · Provider marked overlap' : ''}</Text>
+      <Text style={s.muted}>{segment.audio ? `${audioTime(segment.audio.startMs)}–${audioTime(segment.audio.endMs)}` : segment.providerStream ? `Provider stream ${audioTime(segment.providerStream.startMs)}–${audioTime(segment.providerStream.endMs)} · not aligned to saved audio` : 'Timing not supplied'}{overlaps ? ' · Timing overlaps another passage' : ''}{segment.providerOverlap === true ? ' · Provider marked overlap' : ''}</Text>
       <Text selectable style={s.body}>{original.slice(segment.start, segment.end)}</Text>
     </View>;
   })}</View>;

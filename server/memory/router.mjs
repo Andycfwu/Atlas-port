@@ -25,6 +25,8 @@ export function createMemoryRouter(service, diarization) {
     res.json({ ...meeting, sourceChunks: chunks });
   });
   router.post('/meetings/:id/revisions', (req, res) => res.status(201).json(service.store.versions.revise(req.params.id, req.body)));
+  router.get('/meetings/:id/revisions', (req, res) => res.json(service.store.versions.list(req.params.id)));
+  router.post('/meetings/:id/revisions/:revisionId/select', (req, res) => res.json(service.store.versions.select(req.params.id, req.params.revisionId)));
   router.get('/meetings/:id/revisions/:revisionId', (req, res) => res.json(service.store.versions.revision(req.params.id, req.params.revisionId)));
   router.get('/meetings/:id/revisions/:revisionId/sources/:sourceId', (req, res) => res.json(service.store.versions.source(req.params.id, req.params.revisionId, req.params.sourceId)));
   router.get('/meetings/:id/chunks/:chunkId', (req, res) => res.json(service.store.versions.chunk(req.params.id, req.params.chunkId)));

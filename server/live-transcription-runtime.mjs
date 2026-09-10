@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 // Hash source only: no environment values, credentials, audio, or transcripts.
 const readSourceRevision = () => {
   const hash = createHash('sha256');
-  for (const file of ['live-transcription-server.mjs', 'live-transcription-protocol.mjs', 'live-transcription-runtime.mjs']) {
+  for (const file of ['live-transcription-server.mjs', 'live-transcription-protocol.mjs', 'live-transcription-runtime.mjs', 'deepgram/protocol.mjs', 'deepgram/session.mjs']) {
     hash.update(readFileSync(new URL(file, import.meta.url)));
   }
   return hash.digest('hex').slice(0, 16);

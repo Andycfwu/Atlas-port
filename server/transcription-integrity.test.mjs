@@ -26,7 +26,9 @@ test('recording import retries preserve source identity and independent versions
     assert.deepEqual(store.get(first.id).transcriptSource, data.transcriptSource);
     assert.equal(store.get(first.id).passages.map(p => p.text).join(''), data.originalTranscript);
     const post = store.create({ ...data, sourceKey: 'recording:a:saved_audio:2', transcriptSource: { ...data.transcriptSource, kind: 'saved_audio', traceId: '2', model: 'gpt-transcribe' } }).meeting;
-    assert.notEqual(post.id, first.id);
+    assert.equal(post.id, first.id);
+    assert.notEqual(post.desiredRevisionId, first.revisionId);
+    assert.equal(store.versions.list(first.id).length, 2);
     assert.throws(() => store.create({ ...data, originalTranscript: 'Only one.' }), /already imported/);
     assert.equal(store.get(first.id).originalTranscript, data.originalTranscript);
   } finally { store.close(); }

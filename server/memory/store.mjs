@@ -27,6 +27,10 @@ export class MeetingStore {
   }
   create(input) {
     const data = validateIntake(input);
+    if (data.transcriptSource?.recordingId) {
+      const linked = this.db.prepare('SELECT DISTINCT m.id FROM meetings m JOIN memory_revisions r ON r.meeting_id=m.id JOIN transcript_provenance p ON p.evidence_id=r.evidence_id WHERE m.user_id=? AND p.recording_id=? ORDER BY EXISTS(SELECT 1 FROM diarized_selections d WHERE d.meeting_id=m.id) DESC,m.created_at,m.id LIMIT 1').get(DEVELOPMENT_USER, data.transcriptSource.recordingId);
+      if (linked) return { meeting: this.versions.saveRecordingRevision(linked.id, data), existing: true };
+    }
     const fingerprintParts = [data.originalTranscript, data.title, data.date, [...data.participants].sort()];
     // Independently captured versions remain distinct even if their wording matches.
     if (data.transcriptSource) fingerprintParts.push(data.transcriptSource);
@@ -55,9 +59,16 @@ export class MeetingStore {
   questionMeetings(filters) {
     const meetings = this.list();
     if (filters.meetingIds.length) return meetings; // Explicit historical source selection remains supported.
-    const selected = new Map(this.db.prepare('SELECT * FROM diarized_selections').all().map(row => [row.source_id, row.meeting_id]));
-    return meetings.filter(m => m.transcriptSource?.kind !== 'diarized_audio' || !selected.has(m.transcriptSource.diarizationId) || selected.get(m.transcriptSource.diarizationId) === m.id);
+    const previouslySelected = new Set(this.db.prepare('SELECT meeting_id FROM diarized_selections').all().map(row => row.meeting_id));
+    const seenRecordings = new Set();
+    return meetings.sort((a,b) => Number(previouslySelected.has(b.id)) - Number(previouslySelected.has(a.id)) || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)).filter(m => {
+      const link = this.db.prepare('SELECT p.recording_id FROM memory_revisions r JOIN transcript_provenance p ON p.evidence_id=r.evidence_id WHERE r.meeting_id=? AND p.recording_id IS NOT NULL ORDER BY r.created_at,r.id LIMIT 1').get(m.id);
+      const recordingId = link?.recording_id;
+      if (recordingId) { if (seenRecordings.has(recordingId)) return false; seenRecordings.add(recordingId); }
+      return true;
+    });
   }
+
   get(id) {
     const meeting = this.repo.meeting(id);
     if (!meeting) throw new MemoryError('Meeting not found in this development workspace.', 404, 'MEMORY_NOT_FOUND');

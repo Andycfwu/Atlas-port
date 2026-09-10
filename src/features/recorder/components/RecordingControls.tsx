@@ -14,159 +14,77 @@ interface RecordingControlsProps {
 }
 
 const phaseLabels: Record<RecorderPhase, string> = {
-  idle: 'READY TO CAPTURE',
-  starting: 'OPENING MICROPHONE',
-  recording: 'RECORDING IN PROGRESS',
-  stopping: 'SAVING RECORDING',
-  error: 'RECORDER NEEDS ATTENTION',
+  idle: 'Ready to record', starting: 'Opening microphone', recording: 'Recording',
+  stopping: 'Saving audio', error: 'Needs attention',
 };
 
-export function RecordingControls({
-  durationMillis,
-  isRecording,
-  metering,
-  onToggle,
-  phase,
-}: RecordingControlsProps) {
+export function RecordingControls({ durationMillis, isRecording, metering, onToggle, phase }: RecordingControlsProps) {
   const isBusy = phase === 'starting' || phase === 'stopping';
-  const buttonLabel = isRecording
-    ? 'Stop & Save'
-    : phase === 'starting'
-      ? 'Starting…'
-      : phase === 'stopping'
-        ? 'Saving…'
-        : 'Start Recording';
+  const buttonLabel = phase === 'starting' ? 'Starting…' : phase === 'stopping' ? 'Saving…'
+    : isRecording ? 'Stop & Save' : 'Start Recording';
 
   return (
-    <View style={styles.card}>
-      <View style={styles.stateRow}>
-        <View style={[styles.stateDot, isRecording && styles.recordingDot]} />
-        <Text style={[styles.stateText, isRecording && styles.recordingText]}>
-          {phaseLabels[phase]}
-        </Text>
+    <View style={[styles.card, isRecording && styles.activeCard]}>
+      <View style={styles.topRow}>
+        <Text style={styles.eyebrow}>VOICE CAPTURE</Text>
+        <View style={[styles.statePill, (isRecording || phase === 'error') && styles.activePill]}>
+          <View style={[styles.stateDot, (isRecording || phase === 'error') && styles.activeDot]} />
+          <Text accessibilityLiveRegion="polite" style={[styles.stateText, (isRecording || phase === 'error') && styles.activeText]}>{phaseLabels[phase]}</Text>
+        </View>
       </View>
-
-      <RecordingTimer durationMillis={durationMillis} isRecording={isRecording} />
+      <View style={styles.timerBlock}>
+        <RecordingTimer durationMillis={durationMillis} isRecording={isRecording} />
+        <Text style={styles.timerCaption}>{isRecording ? 'Capturing your conversation' : phase === 'stopping' ? 'Securing your original audio' : 'Ready for a new voice note'}</Text>
+      </View>
       <RecordingVisualizer isRecording={isRecording} metering={metering} />
-
       <Pressable
         accessibilityLabel={buttonLabel}
+        accessibilityHint={isRecording ? 'Stops capture and saves the original audio to your library' : 'Starts microphone recording'}
         accessibilityRole="button"
         accessibilityState={{ busy: isBusy, disabled: isBusy }}
         disabled={isBusy}
-        onPress={() => {
-          void onToggle();
-        }}
-        style={({ pressed }) => [
-          styles.control,
-          isRecording && styles.stopControl,
-          pressed && styles.pressed,
-          isBusy && styles.busy,
-        ]}
+        onPress={() => { void onToggle(); }}
+        style={({ pressed }) => [styles.control, pressed && styles.pressed, isBusy && styles.busy]}
       >
-        <View style={[styles.controlMark, isRecording && styles.stopMark]}>
-          {isBusy ? (
-            <ActivityIndicator color={colors.white} size="small" />
-          ) : (
-            <View style={[styles.markCore, isRecording && styles.stopCore]} />
-          )}
+        <View style={[styles.controlRing, isRecording && styles.activeRing]}>
+          <View style={[styles.controlCore, isRecording && styles.stopControl]}>
+            {isBusy ? <ActivityIndicator color={colors.white} /> : <View style={[styles.mark, isRecording && styles.stopMark]} />}
+          </View>
         </View>
         <Text style={styles.controlLabel}>{buttonLabel}</Text>
-        <Text style={styles.controlMeta}>{isRecording ? 'SAVE' : 'VOICE NOTE'}</Text>
       </Pressable>
+      <View style={styles.footer}>
+        <View style={styles.footerDot} />
+        <Text style={styles.footerText}>Original audio · Saved on this device</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    alignItems: 'center',
-    padding: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 24,
-    backgroundColor: colors.surface,
-    shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.08,
-    shadowRadius: 22,
-    elevation: 4,
-  },
-  stateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    marginBottom: 12,
-  },
-  stateDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.accent,
-  },
-  recordingDot: {
-    backgroundColor: colors.danger,
-  },
-  stateText: {
-    color: colors.mutedInk,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-  },
-  recordingText: {
-    color: colors.danger,
-  },
-  control: {
-    width: '100%',
-    minHeight: 66,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    borderRadius: 19,
-    backgroundColor: colors.brand,
-  },
-  stopControl: {
-    backgroundColor: colors.ink,
-  },
-  pressed: {
-    backgroundColor: colors.brandPressed,
-    transform: [{ scale: 0.99 }],
-  },
-  busy: {
-    opacity: 0.78,
-  },
-  controlMark: {
-    width: 42,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-  },
-  stopMark: {
-    backgroundColor: colors.danger,
-  },
-  markCore: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.white,
-  },
-  stopCore: {
-    borderRadius: 3,
-  },
-  controlLabel: {
-    flex: 1,
-    marginLeft: 12,
-    color: colors.white,
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  controlMeta: {
-    marginRight: 4,
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 1.1,
-  },
+  card: { alignItems: 'center', padding: 20, borderWidth: 1, borderColor: colors.border, borderRadius: 28, backgroundColor: colors.surface, shadowColor: colors.ink, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.035, shadowRadius: 16, elevation: 2 },
+  activeCard: { borderColor: '#EAC5B4' },
+  topRow: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  eyebrow: { color: colors.mutedInk, fontSize: 9, fontWeight: '700', letterSpacing: 1.3 },
+  statePill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 9, borderRadius: 20, backgroundColor: colors.sageSoft },
+  activePill: { backgroundColor: colors.accentSoft },
+  stateDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.brand },
+  activeDot: { backgroundColor: colors.accentBright },
+  stateText: { color: colors.brand, fontSize: 10, fontWeight: '600' },
+  activeText: { color: colors.accent },
+  timerBlock: { alignItems: 'center', marginTop: 16 },
+  timerCaption: { color: colors.mutedInk, fontSize: 12, lineHeight: 18, marginTop: 5, textAlign: 'center' },
+  control: { alignItems: 'center', paddingHorizontal: 20, paddingBottom: 4 },
+  controlRing: { width: 82, height: 82, borderRadius: 41, borderWidth: 1, borderColor: '#EFD6C8', padding: 6 },
+  activeRing: { borderColor: colors.accentBright },
+  controlCore: { flex: 1, borderRadius: 40, backgroundColor: colors.accentBright, alignItems: 'center', justifyContent: 'center' },
+  stopControl: { backgroundColor: colors.ink },
+  mark: { width: 23, height: 23, borderRadius: 12, backgroundColor: colors.white },
+  stopMark: { borderRadius: 5 },
+  controlLabel: { color: colors.ink, fontSize: 14, fontWeight: '700', marginTop: 10 },
+  pressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
+  busy: { opacity: 0.65 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderColor: colors.border, width: '100%', justifyContent: 'center' },
+  footerDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.brand },
+  footerText: { color: colors.mutedInk, fontSize: 10, flexShrink: 1 },
 });

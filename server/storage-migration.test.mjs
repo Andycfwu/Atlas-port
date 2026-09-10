@@ -61,6 +61,7 @@ async function fixture() {
     const result = validateDiarizedResult(raw, { id: 'b'.repeat(64), recordingId: 'synthetic-recording', durationMillis: 5000, byteSize: 7, audioSha256: 'a'.repeat(64) });
     store.repo.putDiarization({ id: result.id, recordingId: result.recordingId, status: 'ready', attempts: 1, error: null, result });
     const anonymous = createDiarizedMeeting(store, { get: id => store.repo.diarization(id) }, { ...details, diarizationId: result.id }).meeting;
+    await run(service, anonymous.id); // Publish the selected revision before correcting its displayed speakers.
     const named = reviseMeetingSpeakers(store, anonymous.id, [{ speakerId: result.speakers[0].id, name: 'Mike' }]).meeting;
     assert.equal((await run(service, named.id)).status, 'ready');
     const namedAnswer = await service.ask({ question: 'property inspection', filters: { meetingIds: [named.id] } });
@@ -87,7 +88,7 @@ test('v1 migration preserves every logical record, original UTF-16 span, omissio
     assert.equal(db.prepare("SELECT count(*) n FROM sqlite_master WHERE name LIKE 'migration_old_%'").get().n, 0);
     assert.equal(db.prepare("SELECT type FROM sqlite_master WHERE name='chunks'").get().type, 'view');
     assert.equal(Object.hasOwn(repo.meeting('old-optional'), 'speakers'), false);
-    assert.equal(repo.meeting(f.post.id).transcriptSource.kind, 'saved_audio');
+    assert.equal(repo.revision(f.post.desiredRevisionId).transcriptSource.kind, 'saved_audio');
     assert.equal(repo.revision(f.historicalRevision).transcriptSource.kind, 'live');
     assert.equal(repo.diarization(f.result.id).result.providerText, f.result.providerText);
     for (const r of db.prepare('SELECT u.*,r.original_text transcript FROM source_units u JOIN memory_revisions r ON r.id=u.revision_id').all()) assert.equal(r.original_text, r.transcript.slice(r.start_offset, r.end_offset));
@@ -148,8 +149,8 @@ test('reopened migrated store keeps historical names/citations, resumes failed j
   try {
     const service = new MeetingMemoryService(store, provider);
     assert.equal(store.get(f.named.id).speakers[0].nameConfirmation.name, 'Mike');
-    assert.equal(store.get(f.corrected.id).speakers[0].nameConfirmation.name, 'Andy');
-    assert.equal(store.get(f.anonymous.id).speakers[0].nameConfirmation, null);
+    assert.equal(store.versions.revision(f.corrected.id, f.corrected.desiredRevisionId).speakers[0].nameConfirmation.name, 'Andy');
+    assert.equal(store.versions.revision(f.anonymous.id, f.anonymous.desiredRevisionId).speakers[0].nameConfirmation, null);
     assert.deepEqual(store.repo.answer(f.namedAnswer.id), f.namedAnswer);
     const citation = f.answer.statements[0].citations[0];
     assert.equal(store.versions.source(f.live.id, citation.revisionId, citation.passageId).text, f.answer.sources[0].text);

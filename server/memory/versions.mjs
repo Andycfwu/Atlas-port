@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { transaction } from '../storage/codec.mjs';
+import { canonical, transaction } from '../storage/codec.mjs';
 import { digest, MemoryError, validateIntake } from './transcript.mjs';
 import { sourceUnits, validateUnits, validateVectors, embeddingInput, assembleChunks } from './pipeline.mjs';
 
@@ -53,9 +53,47 @@ export class MemoryVersions {
     if (data.transcriptSource?.kind === 'diarized_audio') throw new MemoryError('Use the audio identification version action for diarized sources.');
     const revision = this.revisionData({ ...data, id: meetingId });
     return this.transaction(() => {
-      this.repo.putRevision(revision);
+      if (!this.repo.revision(revision.id)) this.repo.putRevision(revision);
       return this.store.update(meetingId, { desiredRevisionId: revision.id, jobId: null, status: current.publishedGenerationId ? 'ready' : 'draft', stage: 'revision_saved', error: null });
     });
+  }
+  list(meetingId) {
+    this.store.get(meetingId);
+    return this.db.prepare('SELECT id FROM memory_revisions WHERE meeting_id=? AND internal_snapshot=0 ORDER BY created_at, id').all(meetingId).map(({ id }) => {
+      const revision = this.revision(meetingId, id);
+      const generation = this.db.prepare("SELECT id FROM memory_generations WHERE meeting_id=? AND revision_id=? AND status='published' ORDER BY rowid DESC LIMIT 1").get(meetingId, id);
+      return { id, createdAt: revision.createdAt, transcriptSource: revision.transcriptSource, characters: revision.originalTranscript.length, generationId: generation?.id ?? null };
+    });
+  }
+  saveRecordingRevision(meetingId, data) {
+    let revision = this.revisionData({ ...data, id: meetingId });
+    const comparable = speakers => speakers.map(s => ({ ...s, nameConfirmation: s.nameConfirmation ? { name: s.nameConfirmation.name } : null }));
+    for (const item of this.list(meetingId)) {
+      const old = this.revision(meetingId, item.id);
+      if (canonical(old.transcriptSource) !== canonical(data.transcriptSource)) continue;
+      if (old.originalTranscript !== data.originalTranscript) throw new MemoryError('This source was already imported with different text. Use an explicit new revision, never overwrite the original.', 409, 'MEMORY_SOURCE_CONFLICT');
+      if (canonical([comparable(old.speakers),old.segments]) !== canonical([comparable(data.speakers),data.segments])) throw new MemoryError('This source has different speaker evidence. Preserve it as an explicitly separate source revision.', 409, 'MEMORY_PROVENANCE_CONFLICT');
+      if (JSON.stringify([old.title,old.date,old.participants]) === JSON.stringify([data.title,data.date,data.participants])) { revision = old; break; }
+    }
+    return this.transaction(() => {
+      if (!this.repo.revision(revision.id)) this.repo.putRevision(revision);
+      const current = this.store.get(meetingId);
+      if (current.desiredRevisionId === revision.id) return current;
+      return this.store.update(meetingId, { desiredRevisionId: revision.id, jobId: null, status: current.publishedGenerationId ? 'ready' : 'draft', stage: 'revision_saved', error: null });
+    });
+  }
+  select(meetingId, revisionId) {
+    const revision = this.revision(meetingId, revisionId);
+    const current = this.store.get(meetingId);
+    if (current.desiredRevisionId === revision.id) return current;
+    return this.transaction(() => this.store.update(meetingId, { desiredRevisionId: revision.id, jobId: null, status: current.publishedGenerationId ? 'ready' : 'draft', stage: 'revision_saved', error: null }));
+  }
+  consult(meetingId, revisionId) {
+    const revision = this.revision(meetingId, revisionId);
+    const version = this.list(meetingId).find(r => r.id === revisionId);
+    if (!version?.generationId) throw new MemoryError('Process this source version before asking about it.', 409, 'MEMORY_REVISION_NOT_INDEXED');
+    const generation = this.generation(meetingId, version.generationId);
+    return { ...this.store.get(meetingId), ...revision, ...generation.result, id: meetingId, revisionId, publishedGenerationId: generation.id };
   }
   generation(meetingId, id) {
     this.store.get(meetingId);

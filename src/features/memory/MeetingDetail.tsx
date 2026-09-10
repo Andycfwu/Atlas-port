@@ -27,7 +27,7 @@ export function MeetingDetail({ meeting, busy, onProcess, onAsk, onSource, onRen
   }
   return <>
     <Text style={s.eyebrow}>{statusLabel(meeting)}</Text>
-    {meeting.transcriptSource ? <Text style={s.muted}>Original source: {meeting.transcriptSource.kind === 'diarized_audio' ? 'diarized audio version' : meeting.transcriptSource.kind === 'live' ? 'saved live transcript' : 'saved-audio transcription'} · {meeting.transcriptSource.status} · {meeting.transcriptSource.model ?? 'Model not recorded'}. Recording: {meeting.transcriptSource.recordingId}</Text> : null}
+    {meeting.transcriptSource ? <Text style={s.muted}>Original source: {meeting.transcriptSource.kind === 'diarized_audio' ? 'diarized audio version' : meeting.transcriptSource.kind === 'live_speakers' ? 'Deepgram live speaker transcript' : meeting.transcriptSource.kind === 'live' ? 'saved live transcript' : 'saved-audio transcription'} · {meeting.transcriptSource.status} · {meeting.transcriptSource.model ?? 'Model not recorded'}. Recording: {meeting.transcriptSource.recordingId}</Text> : null}
     <Text accessibilityRole="header" style={s.title}>{meeting.title}</Text>
     <Text style={s.subtitle}>{meeting.date}{meeting.participants.length ? ` · Participants: ${meeting.participants.join(', ')}` : ' · Participants not supplied'}</Text>
     <Text style={s.muted}>{meeting.speakers?.length ? `Supplied speaker identities: ${meeting.speakers.map(p => p.nameConfirmation ? `${p.label} → ${p.nameConfirmation.name} (user confirmed)` : p.label).join(', ')}` : 'No separate speaker mappings supplied. Any labels in the original remain intact; participant names do not identify unlabeled voices.'}</Text>
@@ -60,7 +60,7 @@ export function MeetingDetail({ meeting, busy, onProcess, onAsk, onSource, onRen
       </Panel>)}
     </> : tab === 'original' ? <>
       <Text style={s.muted}>Unchanged original, divided into stable passages. Supplied labels and timestamps are retained; no speaker identities have been added.</Text>
-      {meeting.transcriptSource?.kind === 'diarized_audio' ? <SpeakerPassages original={meeting.originalTranscript} speakers={meeting.speakers ?? []} segments={meeting.segments ?? []} /> : null}
+      {['diarized_audio', 'live_speakers'].includes(meeting.transcriptSource?.kind ?? '') ? <SpeakerPassages original={meeting.originalTranscript} speakers={meeting.speakers ?? []} segments={meeting.segments ?? []} /> : null}
       {meeting.passages.map(p => <Panel key={p.id}>{refs([p.id])}<Text selectable style={s.body}>{p.text}</Text></Panel>)}
     </> : <>
       <Text style={s.muted}>AI-cleaned wording, separate from the original. Check sources for precise wording and speaker uncertainty.</Text>
