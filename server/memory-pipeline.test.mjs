@@ -1,3 +1,4 @@
+import { migrateRelational } from './storage/migration.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
@@ -166,12 +167,13 @@ test('migration snapshots existing originals, legacy passage IDs, chunks and ans
     const db = new DatabaseSync(file); db.exec('CREATE TABLE meetings(id TEXT PRIMARY KEY,user_id TEXT,fingerprint TEXT,source_key TEXT,payload TEXT); CREATE TABLE chunks(meeting_id TEXT,passage_id TEXT,payload TEXT); CREATE TABLE answers(id TEXT PRIMARY KEY,user_id TEXT,payload TEXT);');
     const legacy = { ...metadata, id: 'old-id', originalTranscript: 'Original $50.', passages: [{ id: 'P0001', start: 0, end: 13, text: 'Original $50.' }], status: 'ready', topics: [], cleanedPassages: [], models: { embedding: 'mock-vectors' }, createdAt: '2026-09-01', updatedAt: '2026-09-01' };
     db.prepare('INSERT INTO meetings VALUES(?,?,?,?,?)').run(legacy.id, 'single-user-development', 'legacy', null, JSON.stringify(legacy));
-    db.prepare('INSERT INTO chunks VALUES(?,?,?)').run(legacy.id, 'P0001', JSON.stringify({ passageId: 'P0001', contextSourceIds: ['P0001'], text: legacy.originalTranscript, embedding: [1,0] })); db.close();
+    db.prepare('INSERT INTO chunks VALUES(?,?,?)').run(legacy.id, 'P0001', JSON.stringify({ passageId: 'P0001', contextSourceIds: ['P0001'], text: legacy.originalTranscript, embedding: [1,0] }));
+    db.prepare('VACUUM INTO ?').run(`${file}.pre-relational-v2.bak`); migrateRelational(db); db.close();
     const store = new MeetingStore(file);
     try {
       const migrated = store.get(legacy.id); assert.equal(migrated.originalTranscript, legacy.originalTranscript); assert.deepEqual(migrated.passages, legacy.passages);
       assert.equal(store.versions.source(legacy.id, migrated.revisionId, 'P0001').text, legacy.originalTranscript);
-      assert.equal(store.chunks(legacy.id).length, 1); assert.ok(existsSync(`${file}.pre-source-v1.bak`));
+      assert.equal(store.chunks(legacy.id).length, 1); assert.ok(existsSync(`${file}.pre-relational-v2.bak`));
     } finally { store.close(); }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

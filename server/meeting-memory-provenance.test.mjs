@@ -112,7 +112,7 @@ test('speaker/audio evidence persists across restart, retries cannot replace it,
     const legacyInput = { ...details, title: 'Legacy', originalTranscript: 'I cannot tell who said this.' };
     const legacy = store.create(legacyInput).meeting;
     delete legacy.speakers; delete legacy.segments;
-    store.db.prepare('UPDATE meetings SET payload=? WHERE id=?').run(JSON.stringify(legacy), legacy.id);
+    store.repo.putMeeting(legacy);
     assert.equal(store.create(legacyInput).meeting.id, legacy.id);
     assert.deepEqual(passageProvenance(store.get(legacy.id), legacy.passages[0]), { speakers: [], segments: [] });
   } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }

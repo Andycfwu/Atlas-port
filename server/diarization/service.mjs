@@ -1,3 +1,4 @@
+import { RelationalMemory } from '../storage/relational.mjs';
 import { readFile, unlink } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { toFile } from 'openai';
@@ -9,17 +10,17 @@ import { DIARIZATION_MODEL, resultId, validateAudioInput, validateDiarizedResult
 export class DiarizationService {
   constructor(db, provider) {
     this.db = db; this.provider = provider; this.jobs = new Map();
-    db.exec('CREATE TABLE IF NOT EXISTS diarizations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, payload TEXT NOT NULL)');
-    for (const { payload } of db.prepare('SELECT payload FROM diarizations WHERE user_id=?').all(DEVELOPMENT_USER)) {
-      const job = JSON.parse(payload);
+    this.repo = new RelationalMemory(db);
+    for (const { id } of db.prepare('SELECT id FROM diarizations WHERE user_id=?').all(DEVELOPMENT_USER)) {
+      const job = this.repo.diarization(id);
       if (job.status === 'processing') this.put({ ...job, status: 'failed', error: 'Identification was interrupted by a backend restart. Retry with the saved audio.' });
     }
   }
-  put(job) { this.db.prepare('INSERT OR REPLACE INTO diarizations VALUES (?, ?, ?)').run(job.id, DEVELOPMENT_USER, JSON.stringify(job)); return job; }
+  put(job) { return this.repo.putDiarization(job); }
   get(id) {
-    const row = this.db.prepare('SELECT payload FROM diarizations WHERE id=? AND user_id=?').get(id, DEVELOPMENT_USER);
-    if (!row) throw new MemoryError('Speaker identification was not found. Identify the saved recording again.', 404);
-    return JSON.parse(row.payload);
+    const job = this.repo.diarization(id);
+    if (!job) throw new MemoryError('Speaker identification was not found. Identify the saved recording again.', 404);
+    return job;
   }
   async start(file, metadata) {
     // This method takes ownership of only the temporary upload, never the phone's original.
@@ -28,8 +29,7 @@ export class DiarizationService {
       validateAudioInput({ ...metadata, byteSize: file.size });
       const audioSha256 = digest(await readFile(file.path));
       const id = resultId(metadata.recordingId, audioSha256);
-      const row = this.db.prepare('SELECT payload FROM diarizations WHERE id=? AND user_id=?').get(id, DEVELOPMENT_USER);
-      const previous = row ? JSON.parse(row.payload) : null;
+      const previous = this.repo.diarization(id);
       if (previous?.status === 'ready' || this.jobs.has(id)) return this.get(id);
       if (this.jobs.size >= 2) throw new MemoryError('Two recordings are already identifying speakers. Wait and retry.', 429);
       const job = this.put({ id, recordingId: metadata.recordingId, status: 'processing', error: null,

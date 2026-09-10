@@ -25,7 +25,8 @@ attachments, and the general chat backend integration remain outside this milest
 separate development Node server continues to support the existing optional
 live and saved-recording transcription; the chat shell does not call it.
 
-See [post-recording speaker diarization and phone acceptance](docs/meeting-diarization.md),
+See [relational SQLite schema, migration, SQL examples and rollback](docs/relational-storage.md),
+[post-recording speaker diarization and phone acceptance](docs/meeting-diarization.md),
 [Source-based topic chunks, revision safety and startup](docs/source-topic-pipeline.md),
 [Meeting Memory setup, models, storage and integration](docs/meeting-memory.md),
 [phone-style transcript verification and speaker/audio provenance](docs/meeting-memory-provenance.md),
@@ -60,8 +61,9 @@ cd /Users/andywu/Desktop/Codex/atlas-port
 EXPO_PUBLIC_API_URL="http://$(ipconfig getifaddr en0):8787" npx expo start --go --lan --port 8081
 ```
 
-Both servers were already running at handoff; reuse them, or stop the corresponding
-terminal with Ctrl+C before starting a replacement. Scan Metro's QR code in Expo Go.
+The backend was restarted after the relational migration; start Metro separately.
+Reuse running servers, or stop the corresponding terminal with Ctrl+C before starting
+a replacement. Scan Metro's QR code in Expo Go.
 Use the same Wi-Fi and allow Local Network access. The backend binds to `0.0.0.0`;
 from iPhone Safari check `http://<Mac Wi-Fi IP>:8787/health` (`10.0.0.104` at handoff).
 Metro connectivity alone does not prove the backend is reachable. Keep Atlas in

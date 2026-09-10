@@ -1,0 +1,27 @@
+{
+  "checked_at": "2026-09-10T18:27:57.370919+00:00",
+  "external_changes_since_precheck_snapshot": [
+    "server/memory/store.mjs",
+    "server/memory/versions.mjs",
+    "server/storage/migrate-cli.mjs",
+    "server/storage/migration.mjs",
+    "server/storage/relational.mjs",
+    "server/storage/schema.mjs"
+  ],
+  "external_added_files": [
+    "server/storage-migration.test.mjs"
+  ],
+  "removed": [],
+  "audit_created_files": [
+    "docs/audits/atlas-production-readiness-2026-09-10/ATLAS_PRODUCTION_READINESS_AUDIT.md",
+    "docs/audits/atlas-production-readiness-2026-09-10/ATLAS_REMEDIATION_PLAN.md",
+    "docs/audits/atlas-production-readiness-2026-09-10/evidence/CHECK_RESULTS.md",
+    "docs/audits/atlas-production-readiness-2026-09-10/evidence/final-source-hashes.json",
+    "docs/audits/atlas-production-readiness-2026-09-10/evidence/initial-status.txt",
+    "docs/audits/atlas-production-readiness-2026-09-10/evidence/lint.log",
+    "docs/audits/atlas-production-readiness-2026-09-10/evidence/snapshot.json",
+    "docs/audits/atlas-production-readiness-2026-09-10/evidence/tests.log",
+    "docs/audits/atlas-production-readiness-2026-09-10/evidence/typecheck.log",
+    "docs/audits/atlas-production-readiness-2026-09-10/evidence/workspace-comparison.json"
+  ]
+}
